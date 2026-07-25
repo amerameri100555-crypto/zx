@@ -9,13 +9,13 @@ TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 # ==================== تنظیمات ====================
-OWNER_ID = 7803165903  # فقط سازنده ربات
+OWNER_ID = 7803165903
 DEEPAI_API_KEY = "eb27dd91-b502-49ea-8c59-cf8324bcef59"
 
-service_lock_status = {}  # {chat_id: True/False}
-welcome_status = {}       # {chat_id: True/False}
-porn_lock_status = {}     # {chat_id: True/False} - قفل پورن
-porn_blocked_users = {}   # {chat_id: {user_id: unblock_time}} - کاربران محدود شده
+service_lock_status = {}
+welcome_status = {}
+porn_lock_status = {}
+porn_blocked_users = {}
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 # ==================== توابع تشخیص پورن ====================
 
 def download_file(file_id):
-    """دانلود فایل از تلگرام"""
     url = f"{BASE_URL}/getFile"
     payload = {"file_id": file_id}
     try:
@@ -44,56 +43,42 @@ def download_file(file_id):
         return None
 
 def check_nsfw_image(image_bytes):
-    """بررسی تصویر با API DeepAI برای تشخیص پورن"""
     try:
         url = "https://api.deepai.org/api/nsfw-detector"
         files = {'image': ('image.jpg', image_bytes, 'image/jpeg')}
         headers = {'api-key': DEEPAI_API_KEY}
-        
         response = requests.post(url, files=files, headers=headers, timeout=30)
-        
         if response.status_code == 200:
             result = response.json()
             nsfw_score = result.get("output", {}).get("nsfw_score", 0)
             logger.info(f"🔍 نمره NSFW: {nsfw_score}")
             return nsfw_score > 0.7
-        else:
-            logger.error(f"❌ خطا در API: {response.status_code} - {response.text}")
-            return False
-            
+        return False
     except Exception as e:
         logger.error(f"❌ خطا در تشخیص پورن: {e}")
         return False
 
 def is_nsfw_media(file_id, file_type):
-    """تشخیص محتوای پورن بر اساس نوع فایل"""
     file_bytes = download_file(file_id)
     if not file_bytes:
         return False
-    
     if file_type in ["photo", "sticker"]:
         return check_nsfw_image(file_bytes)
-    else:
-        logger.info(f"⚠️ نوع فایل {file_type} پشتیبانی نمیشه")
-        return False
+    return False
 
 def is_user_blocked(chat_id, user_id):
-    """بررسی اینکه کاربر در گروه مورد نظر محدود شده یا نه"""
     if chat_id not in porn_blocked_users:
         return False
     if user_id not in porn_blocked_users[chat_id]:
         return False
-    
     unblock_time = porn_blocked_users[chat_id][user_id]
     if datetime.now() < unblock_time:
         return True
     else:
-        # زمان محدودیت تمام شده
         del porn_blocked_users[chat_id][user_id]
         return False
 
 def get_block_message(first_name, user_id):
-    """ساخت پیام اخطار برای کاربر"""
     return f"""
 ⫸ کاربر گرامی : <a href="tg://user?id={user_id}">{first_name}</a> 
 
@@ -165,7 +150,6 @@ def get_welcome_text(first_name, group_name, user_id):
     weekday_name = weekdays.get(jalali.weekday(), '')
     date_str = f"{weekday_name} {jalali.day} - {jalali.month} - {jalali.year}"
     time_str = f"{jalali.hour:02d}:{jalali.minute:02d}:{jalali.second:02d}"
-    
     return f"""
 ⫸ سلام <a href="tg://user?id={user_id}">{first_name}</a> عزیز 🌹
 
@@ -349,17 +333,11 @@ def get_back_keyboard():
 
 def send_message(chat_id, text, keyboard=None, reply_to_message_id=None):
     url = f"{BASE_URL}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True
-    }
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
     if keyboard:
         payload["reply_markup"] = keyboard
     if reply_to_message_id:
         payload["reply_to_message_id"] = reply_to_message_id
-    
     try:
         response = requests.post(url, json=payload)
         if response.status_code != 200:
@@ -383,13 +361,7 @@ def delete_message(chat_id, message_id):
 
 def edit_message(chat_id, message_id, text, keyboard=None):
     url = f"{BASE_URL}/editMessageText"
-    payload = {
-        "chat_id": chat_id,
-        "message_id": message_id,
-        "text": text,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True
-    }
+    payload = {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
     if keyboard:
         payload["reply_markup"] = keyboard
     try:
@@ -445,7 +417,6 @@ def handle_message(update):
     chat_id = message.get("chat", {}).get("id")
     message_id = message.get("message_id")
     chat_type = message.get("chat", {}).get("type")
-    
     user = message.get("from", {})
     user_id = user.get("id", 0)
     first_name = user.get("first_name", "کاربر")
@@ -454,88 +425,47 @@ def handle_message(update):
     if not chat_id:
         return
     
-    # ===== مدیریت در گروه‌ها =====
     if chat_type in ["group", "supergroup"]:
         
-        # ===== قفل پورن - بررسی رسانه‌ها =====
+        # قفل پورن
         if porn_lock_status.get(chat_id, False):
-            
-            # بررسی اینکه کاربر محدود شده یا نه
             if is_user_blocked(chat_id, user_id):
-                # اگر کاربر محدود شده، پیام رو حذف کن
                 delete_message(chat_id, message_id)
-                logger.info(f"🔞 کاربر {first_name} محدود شده و پیامش حذف شد")
                 return
             
             is_nsfw = False
-            file_type = None
-            
-            # بررسی عکس
             if "photo" in message:
                 photo = message["photo"][-1]
                 file_id = photo["file_id"]
                 is_nsfw = is_nsfw_media(file_id, "photo")
-                file_type = "photo"
-            
-            # بررسی ویدیو
-            elif "video" in message:
-                file_id = message["video"]["file_id"]
-                is_nsfw = is_nsfw_media(file_id, "video")
-                file_type = "video"
-            
-            # بررسی گیف
-            elif "animation" in message:
-                file_id = message["animation"]["file_id"]
-                is_nsfw = is_nsfw_media(file_id, "animation")
-                file_type = "animation"
-            
-            # بررسی استیکر
             elif "sticker" in message:
                 file_id = message["sticker"]["file_id"]
                 is_nsfw = is_nsfw_media(file_id, "sticker")
-                file_type = "sticker"
             
-            # بررسی ویدیو نوت
-            elif "video_note" in message:
-                file_id = message["video_note"]["file_id"]
-                is_nsfw = is_nsfw_media(file_id, "video_note")
-                file_type = "video_note"
-            
-            # اگر محتوا پورن بود
             if is_nsfw:
-                # حذف پیام
                 delete_message(chat_id, message_id)
-                
-                # محدود کردن کاربر به مدت 7 روز
                 if chat_id not in porn_blocked_users:
                     porn_blocked_users[chat_id] = {}
                 porn_blocked_users[chat_id][user_id] = datetime.now() + timedelta(days=7)
-                
-                # ارسال پیام اخطار
                 block_text = get_block_message(first_name, user_id)
                 send_message(chat_id, block_text)
-                
-                logger.info(f"🔞 محتوای پورن از {first_name} حذف و کاربر محدود شد در گروه {chat_id}")
+                logger.info(f"🔞 پورن حذف شد از {first_name}")
                 return
         
-        # ===== پردازش پیام‌های خدماتی =====
+        # خدمات تلگرام
         if service_lock_status.get(chat_id, False):
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
                     member_name = member.get("first_name", "کاربر")
                     member_id = member.get("id")
                     delete_message(chat_id, message_id)
-                    
                     if welcome_status.get(chat_id, True):
                         group_name = message.get("chat", {}).get("title", "گروه")
                         welcome_text = get_welcome_text(member_name, group_name, member_id)
                         send_message(chat_id, welcome_text)
-                        logger.info(f"👋 خوش‌آمدگویی به {member_name} در گروه {group_name}")
                 return
-            
             if "left_chat_member" in message:
                 delete_message(chat_id, message_id)
-                logger.info(f"🚪 پیام خروج حذف شد")
                 return
         
         elif welcome_status.get(chat_id, True):
@@ -546,78 +476,52 @@ def handle_message(update):
                     group_name = message.get("chat", {}).get("title", "گروه")
                     welcome_text = get_welcome_text(member_name, group_name, member_id)
                     send_message(chat_id, welcome_text)
-                    logger.info(f"👋 خوش‌آمدگویی به {member_name} در گروه {group_name}")
                 return
         
-        # ===== دستورات گروه (فقط ادمین‌ها) =====
+        # دستورات ادمین
         if is_admin(chat_id, user_id):
-            
-            if text == "قفل خدمات تلگرام" or text == "/lock_service":
+            if text in ["قفل خدمات تلگرام", "/lock_service"]:
                 service_lock_status[chat_id] = True
-                response_text = "<b>◂ قفل خدمات تلگرام فعال شد !</b>"
-                send_message(chat_id, response_text, reply_to_message_id=message_id)
-                logger.info(f"🔒 قفل خدمات در گروه {chat_id} توسط {first_name} فعال شد")
+                send_message(chat_id, "<b>◂ قفل خدمات تلگرام فعال شد !</b>", reply_to_message_id=message_id)
                 return
-            
-            if text == "باز کردن خدمات تلگرام" or text == "/unlock_service":
+            if text in ["باز کردن خدمات تلگرام", "/unlock_service"]:
                 service_lock_status[chat_id] = False
-                response_text = "<b>◂ قفل خدمات تلگرام غیر فعال شد !</b>"
-                send_message(chat_id, response_text, reply_to_message_id=message_id)
-                logger.info(f"🔓 قفل خدمات در گروه {chat_id} توسط {first_name} غیرفعال شد")
+                send_message(chat_id, "<b>◂ قفل خدمات تلگرام غیر فعال شد !</b>", reply_to_message_id=message_id)
                 return
-            
-            if text == "خوش آمدگویی فعال" or text == "/enable_welcome":
+            if text in ["خوش آمدگویی فعال", "/enable_welcome"]:
                 welcome_status[chat_id] = True
-                response_text = "<b>◄ خوش آمدگویی فعال شد !</b>"
-                send_message(chat_id, response_text, reply_to_message_id=message_id)
-                logger.info(f"✅ خوش‌آمدگویی در گروه {chat_id} توسط {first_name} فعال شد")
+                send_message(chat_id, "<b>◄ خوش آمدگویی فعال شد !</b>", reply_to_message_id=message_id)
                 return
-            
-            if text == "خوش آمدگویی غیرفعال" or text == "/disable_welcome":
+            if text in ["خوش آمدگویی غیرفعال", "/disable_welcome"]:
                 welcome_status[chat_id] = False
-                response_text = "<b>◄ خوش آمدگویی غیرفعال شد !</b>"
-                send_message(chat_id, response_text, reply_to_message_id=message_id)
-                logger.info(f"❌ خوش‌آمدگویی در گروه {chat_id} توسط {first_name} غیرفعال شد")
+                send_message(chat_id, "<b>◄ خوش آمدگویی غیرفعال شد !</b>", reply_to_message_id=message_id)
                 return
         
-        # ===== دستورات فقط برای سازنده ربات =====
+        # دستورات سازنده
         if user_id == OWNER_ID:
-            
-            if text == "قفل پورن" or text == "/lock_porn":
+            if text in ["قفل پورن", "/lock_porn"]:
                 porn_lock_status[chat_id] = True
-                response_text = "<b>◂ قفل پورن فعال شد !</b>"
-                send_message(chat_id, response_text, reply_to_message_id=message_id)
-                logger.info(f"🔞 قفل پورن در گروه {chat_id} توسط سازنده فعال شد")
+                send_message(chat_id, "<b>◂ قفل پورن فعال شد !</b>", reply_to_message_id=message_id)
                 return
-            
-            if text == "باز کردن پورن" or text == "/unlock_porn":
+            if text in ["باز کردن پورن", "/unlock_porn"]:
                 porn_lock_status[chat_id] = False
-                # پاک کردن لیست کاربران محدود شده
                 if chat_id in porn_blocked_users:
                     del porn_blocked_users[chat_id]
-                response_text = "<b>◂ قفل پورن غیر فعال شد !</b>"
-                send_message(chat_id, response_text, reply_to_message_id=message_id)
-                logger.info(f"🔞 قفل پورن در گروه {chat_id} توسط سازنده غیرفعال شد")
+                send_message(chat_id, "<b>◂ قفل پورن غیر فعال شد !</b>", reply_to_message_id=message_id)
                 return
         
-        # ===== استارت در گروه =====
         if text == "/start":
             return
     
-    # ===== مدیریت در پیوی =====
     elif chat_type == "private":
-        
         if text == "/start":
             start_text = get_start_text(user_id, first_name)
             keyboard = get_main_keyboard()
             send_message(chat_id, start_text, keyboard, reply_to_message_id=message_id)
-            logger.info(f"📨 ارسال استارت به {first_name} در پیوی")
             return
-        
         if text:
             unknown_text = get_unknown_text()
-            send_message(chat_id, unknown_text, None, reply_to_message_id=message_id)
-            logger.info(f"❌ پاسخ به پیام ناشناخته از {first_name} در پیوی: {text}")
+            send_message(chat_id, unknown_text, reply_to_message_id=message_id)
             return
 
 def handle_callback(update):
@@ -630,7 +534,7 @@ def handle_callback(update):
     if not chat_id or not data:
         return
     
-    logger.info(f"🔘 کال‌بک دریافت شد: {data} از {chat_id}")
+    logger.info(f"🔘 کال‌بک: {data}")
     
     if data == "back":
         user = callback.get("from", {})
@@ -640,19 +544,39 @@ def handle_callback(update):
         keyboard = get_main_keyboard()
         edit_message(chat_id, message_id, text, keyboard)
         answer_callback(callback_id)
-    
     elif data == "info":
         edit_message(chat_id, message_id, get_info_text(), get_back_keyboard())
         answer_callback(callback_id)
-    
     elif data == "test":
         edit_message(chat_id, message_id, get_test_guide_text(), get_back_keyboard())
         answer_callback(callback_id)
-    
     elif data == "compare":
         edit_message(chat_id, message_id, get_compare_text(), get_back_keyboard())
         answer_callback(callback_id)
-    
     elif data == "price":
         edit_message(chat_id, message_id, get_price_text(), get_back_keyboard())
-        answer
+        answer_callback(callback_id)
+
+# ==================== اصلی ====================
+
+def main():
+    logger.info("🤖 ربات ReaperVoid با موفقیت راه‌اندازی شد!")
+    logger.info("📡 در حال گوش دادن به پیام‌ها...")
+    
+    offset = None
+    while True:
+        try:
+            updates = get_updates(offset)
+            for update in updates:
+                offset = update["update_id"] + 1
+                if "message" in update:
+                    handle_message(update)
+                if "callback_query" in update:
+                    handle_callback(update)
+        except Exception as e:
+            logger.error(f"خطا در حلقه اصلی: {e}")
+            time.sleep(5)
+        time.sleep(1)
+
+if __name__ == "__main__":
+    main()
