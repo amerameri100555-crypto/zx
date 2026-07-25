@@ -208,6 +208,16 @@ def get_price_text():
 🆔 @XMrAmer
 """
 
+def get_unknown_text():
+    return """
+❌ <b>متاسفانه قادر به درخواست شما نیستم!</b>
+
+🔰 لطفاً برای مشاهده منوی اصلی و دریافت اطلاعات کامل ربات، 
+دستور <b>/start</b> را ارسال کنید.
+
+📌 ما همیشه در کنار شما هستیم!
+"""
+
 # ==================== کیبورد ====================
 
 def get_main_keyboard():
@@ -337,12 +347,19 @@ def main():
                     user_id = user.get("id", 0)
                     first_name = user.get("first_name", "کاربر")
                     
-                    if "text" in message and message["text"] == "/start":
-                        text = get_start_text(user_id, first_name)
-                        keyboard = get_main_keyboard()
-                        # ارسال پیام با ریپلای به پیام استارت کاربر
-                        send_message_with_keyboard(chat_id, text, keyboard, reply_to_message_id=message_id)
-                        logger.info(f"📨 ارسال استارت با ریپلای به {first_name}")
+                    if "text" in message:
+                        text = message.get("text", "")
+                        
+                        if text == "/start":
+                            start_text = get_start_text(user_id, first_name)
+                            keyboard = get_main_keyboard()
+                            send_message_with_keyboard(chat_id, start_text, keyboard, reply_to_message_id=message_id)
+                            logger.info(f"📨 ارسال استارت با ریپلای به {first_name}")
+                        else:
+                            # پاسخ به پیام‌های ناشناخته
+                            unknown_text = get_unknown_text()
+                            send_message_with_keyboard(chat_id, unknown_text, None, reply_to_message_id=message_id)
+                            logger.info(f"❌ پاسخ به پیام ناشناخته از {first_name}")
                 
                 if "callback_query" in update:
                     callback = update["callback_query"]
