@@ -1,9 +1,16 @@
-import asyncio
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 # توکن ربات
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
+
+# فعال کردن لاگ
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # متن استارت با فرمت بولد و برجسته (از HTML استفاده میکنیم)
 START_TEXT = """
@@ -59,17 +66,17 @@ START_TEXT = """
 ✨ <b>با ما، گروهتو به اوج برسون!</b> ✨
 """
 
-async def start(update: Update, context: CallbackContext):
+def start(update: Update, context: CallbackContext):
     """ارسال متن استارت با ریپلای به کاربر"""
     user = update.effective_user
     # ریپلای به پیام استارت کاربر
-    await update.message.reply_text(
+    update.message.reply_text(
         START_TEXT,
         parse_mode='HTML',  # استفاده از HTML برای بولد و برجسته کردن
         disable_web_page_preview=True
     )
 
-async def help_command(update: Update, context: CallbackContext):
+def help_command(update: Update, context: CallbackContext):
     """دستور راهنما"""
     help_text = """
 <b>🤖 راهنمای ربات مدیریت گروه</b>
@@ -80,35 +87,40 @@ async def help_command(update: Update, context: CallbackContext):
 <b>⚠️ توجه:</b>
 این ربات توسط تیم ZX ساخته شده و تمام حقوق آن محفوظ است.
 """
-    await update.message.reply_text(help_text, parse_mode='HTML')
+    update.message.reply_text(help_text, parse_mode='HTML')
 
-async def unknown(update: Update, context: CallbackContext):
+def unknown(update: Update, context: CallbackContext):
     """پاسخ به پیام‌های ناشناخته"""
-    await update.message.reply_text(
+    update.message.reply_text(
         "❌ دستور نامعتبر!\nبرای مشاهده راهنما از /help استفاده کنید.",
         parse_mode='HTML'
     )
 
+def error_handler(update, context):
+    """مدیریت خطاها"""
+    logger.warning('Update "%s" caused error "%s"', update, context.error)
+
 def main():
     """تابع اصلی اجرای ربات"""
-    # ساخت اپلیکیشن
-    application = Application.builder().token(TOKEN).build()
+    # ساخت آپدیت‌ر با نسخه قدیمی
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
 
     # افزودن هندلرها
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("help", help_command))
     
     # هندلر برای پیام‌های ناشناخته (به جز دستورات)
-    application.add_handler(MessageHandler(filters.COMMAND, unknown))
+    dp.add_handler(MessageHandler(Filters.command, unknown))
     
-    # هندلر برای پیام‌های غیر از دستورات (اختیاری)
-    # اگر میخواهید به همه پیام‌ها پاسخ دهد، این خط را فعال کنید
-    # application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown))
+    # هندلر خطا
+    dp.add_error_handler(error_handler)
 
     # شروع ربات
-    print("🤖 ربات با موفقیت راه‌اندازی شد!")
-    print("📡 در حال گوش دادن به پیام‌ها...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    logger.info("🤖 ربات با موفقیت راه‌اندازی شد!")
+    logger.info("📡 در حال گوش دادن به پیام‌ها...")
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
     main()
