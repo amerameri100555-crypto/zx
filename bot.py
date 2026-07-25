@@ -9,7 +9,8 @@ BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# متن استارت
+# ==================== متن‌ها ====================
+
 def get_start_text(user_id, first_name):
     return f"""
 🌟 <b>سلام بر تو <a href="tg://user?id={user_id}">{first_name}</a> عزیز</b> 🌹
@@ -60,12 +61,13 @@ def get_start_text(user_id, first_name):
 ⚠️ تذکر حقوقی :
 
 ◄ <b>تمامی ایده‌ها و کدهای این ربات متعلق به تیم ZX بوده و هر گونه کپی‌برداری یا تقلید، پیگرد قانونی دارد. حقوق مادی و معنوی محفوظ است.</b>
+
+【 <b>Licenced By 🆉︎🆇︎</b> 】
 """
 
-# متن اطلاعات تکمیلی
 def get_info_text():
     return """
-📋 <b>اطلاعات تکمیلی درباره ربات ReaperVoid :</b>
+📓 <b>اطلاعات بیشتر درباره ربات ReaperVoid :</b>
 
 ✅ این ربات بر روی <b>سرورهای اختصاصی و باکیفیت آمستردام هلند</b> مستقر شده است که کمترین پینگ را به سرورهای تلگرام دارند و این امر موجب پردازش فوق‌سریع اطلاعات در گروه‌های بزرگ میشود.
 
@@ -88,33 +90,135 @@ def get_info_text():
 ✅ دستورات ربات به دو زبان <b>فارسی و انگلیسی</b> طراحی شده و سعی شده در نهایت سادگی باشد. همچنین یک <b>پنل مدیریتی شیشه‌ای (Inline Panel)</b> در ربات تعبیه شده که تمامی تنظیمات گروه را به راحتی در اختیار شما قرار میدهد.
 
 ✅ این ربات توسط <b>تیم حرفه‌ای و با‌سابقه ZX</b> توسعه یافته و هدف ما ایجاد امنیت و سهولت در مدیریت گروه‌های شماست. ربات ReaperVoid همواره چندین قدم از سایر ربات‌های مشابه جلوتر است و از هیچ نظر عقب نخواهد ماند.
-
-─┅━━━━✦━━━━┅─
-
-👨‍💻 جهت مشاوره و نصب :
-
-🆔 @MrNasiB
 """
 
-def get_inline_keyboard():
-    """ساخت دکمه‌های شیشه‌ای"""
+def get_test_guide_text():
+    return """
+🗒 <b>راهنمای تست ربات ReaperVoid :</b>
+
+✅ برای تست ربات کافیست آن را به گروه خود اضافه کنید.
+
+✅ پس از اضافه شدن، ربات به صورت خودکار فعال میشود.
+
+✅ میتوانید با دستور <b>/settings</b> وارد پنل مدیریتی شوید.
+
+✅ تمامی قابلیت‌ها به مدت <b>۲۴ ساعت</b> به صورت رایگان در دسترس شماست.
+
+✅ پس از اتمام تست، میتوانید برای خرید اشتراک اقدام کنید.
+
+✅ در صورت بروز هرگونه مشکل، تیم پشتیبانی در کنار شماست.
+
+📌 <b>توجه :</b> برای تست حتماً ربات را ادمین گروه کنید تا تمامی قابلیت‌ها فعال شوند.
+"""
+
+def get_compare_text():
+    return """
+🦾 <b>مقایسه ربات رایگان با نسخه اشتراکی :</b>
+
+┅┅┅┅┅┅┅┅┅┅┅┅┅
+
+✅ <b>نسخه رایگان (تستی) :</b>
+
+◄ مدت زمان : <b>۲۴ ساعت</b>
+◄ تعداد گروه : <b>۱ گروه</b>
+◄ سرعت پردازش : <b>متوسط</b>
+◄ قفل‌ها : <b>محدود</b>
+◄ پشتیبانی : <b>ندارد</b>
+◄ آپدیت : <b>ندارد</b>
+◄ پنل مدیریتی : <b>فعال</b>
+◄ گزارشات : <b>محدود</b>
+
+┅┅┅┅┅┅┅┅┅┅┅┅┅
+
+💎 <b>نسخه اشتراکی (VIP) :</b>
+
+◄ مدت زمان : <b>نامحدود</b>
+◄ تعداد گروه : <b>نامحدود</b>
+◄ سرعت پردازش : <b>فوق‌سریع</b>
+◄ قفل‌ها : <b>کامل و پیشرفته</b>
+◄ پشتیبانی : <b>۲۴/۷</b>
+◄ آپدیت : <b>مادام‌العمر</b>
+◄ پنل مدیریتی : <b>پیشرفته</b>
+◄ گزارشات : <b>کامل و دقیق</b>
+◄ اولویت در درخواست ویژگی‌های جدید
+
+┅┅┅┅┅┅┅┅┅┅┅┅┅
+
+💳 برای تهیه نسخه اشتراکی با پشتیبانی تماس بگیرید.
+"""
+
+def get_price_text():
+    return """
+💎 <b>نرخ و قیمت ربات ReaperVoid :</b>
+
+┅┅┅┅┅┅┅┅┅┅┅┅┅
+
+💰 <b>پلن های اشتراکی :</b>
+
+📌 <b>پلن ماهانه :</b>
+    ◄ قیمت : ۵۰,۰۰۰ تومان
+    ◄ پشتیبانی کامل
+    ◄ آپدیت ماهانه
+
+📌 <b>پلن سه ماهه :</b>
+    ◄ قیمت : ۱۲۰,۰۰۰ تومان
+    ◄ پشتیبانی کامل
+    ◄ آپدیت مداوم
+    ◄ تخفیف ویژه
+
+📌 <b>پلن شش ماهه :</b>
+    ◄ قیمت : ۲۰۰,۰۰۰ تومان
+    ◄ پشتیبانی فوق‌العاده
+    ◄ آپدیت مداوم
+    ◄ تخفیف ویژه
+    ◄ اولویت در درخواست ویژگی‌ها
+
+📌 <b>پلن سالانه :</b>
+    ◄ قیمت : ۳۵۰,۰۰۰ تومان
+    ◄ پشتیبانی ویژه ۲۴/۷
+    ◄ آپدیت مادام‌العمر
+    ◄ بیشترین تخفیف
+    ◄ اولویت ویژه در درخواست ویژگی‌ها
+
+┅┅┅┅┅┅┅┅┅┅┅┅┅
+
+💳 برای خرید و اطلاع از تخفیف‌های ویژه با پشتیبانی تماس بگیرید.
+"""
+
+# ==================== کیبورد ====================
+
+def get_main_keyboard():
+    """دکمه‌های منوی اصلی"""
     keyboard = [
         [
             {"text": "📢 کانال ربات", "url": "https://t.me/ReaperVoidTM"},
-            {"text": "👨‍💻 ارتباط با پشتیبانی", "url": "https://t.me/XMrAmer"}
+            {"text": "👨‍💻 پشتیبانی", "url": "https://t.me/XMrAmer"}
         ],
         [
             {"text": "➕ اضافه کردن به گروه", "url": "https://t.me/ReaperVoidbot?startgroup=new"},
             {"text": "💬 گروه پشتیبانی", "url": "https://t.me/ReaperVoidGP"}
         ],
         [
-            {"text": "📋 اطلاعات تکمیلی", "callback_data": "info"}
+            {"text": "📓 اطلاعات بیشتر", "callback_data": "info"},
+            {"text": "🗒 راهنمای تست", "callback_data": "test"}
+        ],
+        [
+            {"text": "🦾 فرق رایگان با اشتراکی", "callback_data": "compare"},
+            {"text": "💎 نرخ ربات", "callback_data": "price"}
         ]
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
+def get_back_keyboard():
+    """دکمه بازگشت به منوی اصلی"""
+    keyboard = [
+        [{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back"}]
+    ]
+    return json.dumps({"inline_keyboard": keyboard})
+
+# ==================== توابع تلگرام ====================
+
 def send_message_with_keyboard(chat_id, text, keyboard):
-    """ارسال پیام با دکمه‌های شیشه‌ای"""
     url = f"{BASE_URL}/sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -126,14 +230,13 @@ def send_message_with_keyboard(chat_id, text, keyboard):
     try:
         response = requests.post(url, json=payload)
         if response.status_code != 200:
-            logger.error(f"خطا در ارسال پیام: {response.text}")
+            logger.error(f"خطا در ارسال: {response.text}")
         return response
     except Exception as e:
         logger.error(f"خطا: {e}")
         return None
 
 def edit_message_text(chat_id, message_id, text, keyboard=None):
-    """ویرایش پیام (برای دکمه‌های کال‌بک)"""
     url = f"{BASE_URL}/editMessageText"
     payload = {
         "chat_id": chat_id,
@@ -147,14 +250,13 @@ def edit_message_text(chat_id, message_id, text, keyboard=None):
     try:
         response = requests.post(url, json=payload)
         if response.status_code != 200:
-            logger.error(f"خطا در ویرایش پیام: {response.text}")
+            logger.error(f"خطا در ویرایش: {response.text}")
         return response
     except Exception as e:
         logger.error(f"خطا: {e}")
         return None
 
 def answer_callback_query(callback_id, text=None):
-    """پاسخ به کال‌بک کوئری"""
     url = f"{BASE_URL}/answerCallbackQuery"
     payload = {"callback_query_id": callback_id}
     if text:
@@ -163,7 +265,7 @@ def answer_callback_query(callback_id, text=None):
     try:
         requests.post(url, json=payload)
     except Exception as e:
-        logger.error(f"خطا در پاسخ به کال‌بک: {e}")
+        logger.error(f"خطا در پاسخ کال‌بک: {e}")
 
 def get_updates(offset=None):
     url = f"{BASE_URL}/getUpdates"
@@ -177,6 +279,8 @@ def get_updates(offset=None):
         logger.error(f"خطا: {e}")
         return []
 
+# ==================== اصلی ====================
+
 def main():
     logger.info("🤖 ربات با موفقیت راه‌اندازی شد!")
     logger.info("📡 در حال گوش دادن به پیام‌ها...")
@@ -188,7 +292,6 @@ def main():
             for update in updates:
                 offset = update["update_id"] + 1
                 
-                # مدیریت پیام‌ها
                 if "message" in update:
                     message = update["message"]
                     chat_id = message["chat"]["id"]
@@ -198,11 +301,10 @@ def main():
                     
                     if "text" in message and message["text"] == "/start":
                         text = get_start_text(user_id, first_name)
-                        keyboard = get_inline_keyboard()
+                        keyboard = get_main_keyboard()
                         send_message_with_keyboard(chat_id, text, keyboard)
                         logger.info(f"📨 ارسال استارت به {first_name}")
                 
-                # مدیریت کال‌بک‌ها (دکمه‌های شیشه‌ای)
                 if "callback_query" in update:
                     callback = update["callback_query"]
                     callback_id = callback["id"]
@@ -210,29 +312,30 @@ def main():
                     message_id = callback["message"]["message_id"]
                     data = callback.get("data", "")
                     
-                    if data == "info":
-                        info_text = get_info_text()
-                        # ارسال پیام جدید با اطلاعات تکمیلی
-                        keyboard_back = json.dumps({
-                            "inline_keyboard": [
-                                [{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back"}]
-                            ]
-                        })
-                        # ویرایش پیام فعلی به اطلاعات تکمیلی
-                        edit_message_text(chat_id, message_id, info_text, keyboard_back)
-                        answer_callback_query(callback_id)
-                        logger.info(f"📨 نمایش اطلاعات تکمیلی به {chat_id}")
-                    
-                    elif data == "back":
-                        # بازگشت به منوی اصلی
+                    if data == "back":
                         user = callback.get("from", {})
                         user_id = user.get("id", 0)
                         first_name = user.get("first_name", "کاربر")
-                        start_text = get_start_text(user_id, first_name)
-                        keyboard = get_inline_keyboard()
-                        edit_message_text(chat_id, message_id, start_text, keyboard)
+                        text = get_start_text(user_id, first_name)
+                        keyboard = get_main_keyboard()
+                        edit_message_text(chat_id, message_id, text, keyboard)
                         answer_callback_query(callback_id)
-                        logger.info(f"🔙 بازگشت به منوی اصلی {chat_id}")
+                    
+                    elif data == "info":
+                        edit_message_text(chat_id, message_id, get_info_text(), get_back_keyboard())
+                        answer_callback_query(callback_id)
+                    
+                    elif data == "test":
+                        edit_message_text(chat_id, message_id, get_test_guide_text(), get_back_keyboard())
+                        answer_callback_query(callback_id)
+                    
+                    elif data == "compare":
+                        edit_message_text(chat_id, message_id, get_compare_text(), get_back_keyboard())
+                        answer_callback_query(callback_id)
+                    
+                    elif data == "price":
+                        edit_message_text(chat_id, message_id, get_price_text(), get_back_keyboard())
+                        answer_callback_query(callback_id)
                         
         except Exception as e:
             logger.error(f"خطا در حلقه اصلی: {e}")
