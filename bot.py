@@ -1,6 +1,7 @@
+import asyncio
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # توکن ربات
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
@@ -66,17 +67,15 @@ START_TEXT = """
 ✨ <b>با ما، گروهتو به اوج برسون!</b> ✨
 """
 
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ارسال متن استارت با ریپلای به کاربر"""
-    user = update.effective_user
-    # ریپلای به پیام استارت کاربر
-    update.message.reply_text(
+    await update.message.reply_text(
         START_TEXT,
-        parse_mode='HTML',  # استفاده از HTML برای بولد و برجسته کردن
+        parse_mode='HTML',
         disable_web_page_preview=True
     )
 
-def help_command(update: Update, context: CallbackContext):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دستور راهنما"""
     help_text = """
 <b>🤖 راهنمای ربات مدیریت گروه</b>
@@ -87,40 +86,36 @@ def help_command(update: Update, context: CallbackContext):
 <b>⚠️ توجه:</b>
 این ربات توسط تیم ZX ساخته شده و تمام حقوق آن محفوظ است.
 """
-    update.message.reply_text(help_text, parse_mode='HTML')
+    await update.message.reply_text(help_text, parse_mode='HTML')
 
-def unknown(update: Update, context: CallbackContext):
+async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """پاسخ به پیام‌های ناشناخته"""
-    update.message.reply_text(
+    await update.message.reply_text(
         "❌ دستور نامعتبر!\nبرای مشاهده راهنما از /help استفاده کنید.",
         parse_mode='HTML'
     )
 
-def error_handler(update, context):
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت خطاها"""
-    logger.warning('Update "%s" caused error "%s"', update, context.error)
+    logger.warning(f'Update "{update}" caused error "{context.error}"')
 
 def main():
     """تابع اصلی اجرای ربات"""
-    # ساخت آپدیت‌ر با نسخه قدیمی
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
+    # ساخت اپلیکیشن با نسخه 20.x
+    application = Application.builder().token(TOKEN).build()
 
     # افزودن هندلرها
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("help", help_command))
-    
-    # هندلر برای پیام‌های ناشناخته (به جز دستورات)
-    dp.add_handler(MessageHandler(Filters.command, unknown))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(MessageHandler(filters.COMMAND, unknown))
     
     # هندلر خطا
-    dp.add_error_handler(error_handler)
+    application.add_error_handler(error_handler)
 
     # شروع ربات
     logger.info("🤖 ربات با موفقیت راه‌اندازی شد!")
     logger.info("📡 در حال گوش دادن به پیام‌ها...")
-    updater.start_polling()
-    updater.idle()
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
