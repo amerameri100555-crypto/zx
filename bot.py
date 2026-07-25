@@ -4,22 +4,17 @@ import logging
 import json
 import jdatetime
 from datetime import datetime
-import base64
-import io
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 # ==================== تنظیمات ====================
 OWNER_ID = 7803165903  # فقط سازنده ربات
+DEEPAI_API_KEY = "eb27dd91-b502-49ea-8c59-cf8324bcef59"  # کلید API برای تشخیص پورن
+
 service_lock_status = {}  # {chat_id: True/False}
 welcome_status = {}       # {chat_id: True/False}
 porn_lock_status = {}     # {chat_id: True/False} - قفل پورن
-
-# API تشخیص پورن (از سرویس رایگان استفاده میکنیم)
-# برای این مثال از API سرویس DeepAI استفاده میکنیم (نیاز به API Key)
-DEEPAI_API_KEY = "your-deepai-api-key"  # باید ثبت نام کنی و کلید بگیری
-# یا از سرویس NSFW Detector استفاده کن
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -48,39 +43,26 @@ def download_file(file_id):
         return None
 
 def check_nsfw_image(image_bytes):
-    """بررسی تصویر با API تشخیص پورن"""
+    """بررسی تصویر با API DeepAI برای تشخیص پورن"""
     try:
-        # روش 1: استفاده از DeepAI (رایگان - نیاز به ثبت نام)
-        # ثبت نام در: https://deepai.org/dashboard/profile
         url = "https://api.deepai.org/api/nsfw-detector"
         files = {'image': ('image.jpg', image_bytes, 'image/jpeg')}
         headers = {'api-key': DEEPAI_API_KEY}
-        response = requests.post(url, files=files, headers=headers)
+        
+        response = requests.post(url, files=files, headers=headers, timeout=30)
         
         if response.status_code == 200:
             result = response.json()
             nsfw_score = result.get("output", {}).get("nsfw_score", 0)
-            # اگر نمره بیشتر از 0.7 باشه، محتوا پورن محسوب میشه
+            logger.info(f"🔍 نمره NSFW: {nsfw_score}")
             return nsfw_score > 0.7
         else:
-            logger.error(f"خطا در API تشخیص پورن: {response.text}")
+            logger.error(f"❌ خطا در API: {response.status_code} - {response.text}")
             return False
             
     except Exception as e:
-        logger.error(f"خطا در تشخیص پورن: {e}")
+        logger.error(f"❌ خطا در تشخیص پورن: {e}")
         return False
-
-def check_nsfw_video(file_bytes):
-    """بررسی ویدیو (با نمونه‌گیری از فریم‌ها)"""
-    # اینجا میتونیم از کتابخانه‌های OpenCV برای استخراج فریم استفاده کنیم
-    # یا از APIهای تشخیص ویدیو
-    # فعلاً یک بررسی ساده
-    return False  # برای پیاده‌سازی کامل نیاز به کتابخانه‌های بیشتر داریم
-
-def check_nsfw_animation(file_bytes):
-    """بررسی گیف/انیمیشن"""
-    # مشابه ویدیو
-    return False
 
 def is_nsfw_media(file_id, file_type):
     """تشخیص محتوای پورن بر اساس نوع فایل"""
@@ -88,16 +70,11 @@ def is_nsfw_media(file_id, file_type):
     if not file_bytes:
         return False
     
-    if file_type in ["photo"]:
+    if file_type in ["photo", "sticker"]:
         return check_nsfw_image(file_bytes)
-    elif file_type in ["video", "video_note"]:
-        return check_nsfw_video(file_bytes)
-    elif file_type in ["animation"]:
-        return check_nsfw_animation(file_bytes)
-    elif file_type in ["sticker"]:
-        # استیکرها رو هم بررسی میکنیم (اگه تصویر باشن)
-        return check_nsfw_image(file_bytes)
-    return False
+    else:
+        logger.info(f"⚠️ نوع فایل {file_type} پشتیبانی نمیشه")
+        return False
 
 # ==================== متن‌ها ====================
 
@@ -458,7 +435,7 @@ def handle_message(update):
         if porn_lock_status.get(chat_id, False):
             # بررسی عکس
             if "photo" in message:
-                photo = message["photo"][-1]  # آخرین (بزرگترین) سایز
+                photo = message["photo"][-1]
                 file_id = photo["file_id"]
                 if is_nsfw_media(file_id, "photo"):
                     delete_message(chat_id, message_id)
@@ -475,7 +452,7 @@ def handle_message(update):
                     logger.info(f"🔞 ویدیوی پورن حذف شد از {first_name} در گروه {chat_id}")
                     return
             
-            # بررسی گیف/انیمیشن
+            # بررسی گیف
             if "animation" in message:
                 file_id = message["animation"]["file_id"]
                 if is_nsfw_media(file_id, "animation"):
@@ -533,8 +510,7 @@ def handle_message(update):
                     logger.info(f"👋 خوش‌آمدگویی به {member_name} در گروه {group_name}")
                 return
         
-        # ===== دستورات گروه =====
-        # دستورات فقط برای ادمین‌ها
+        # ===== دستورات گروه (فقط ادمین‌ها) =====
         if is_admin(chat_id, user_id):
             
             if text == "قفل خدمات تلگرام" or text == "/lock_service":
@@ -633,4 +609,39 @@ def handle_callback(update):
     
     elif data == "compare":
         edit_message(chat_id, message_id, get_compare_text(), get_back_keyboard())
-        answer_callback(c
+        answer_callback(callback_id)
+    
+    elif data == "price":
+        edit_message(chat_id, message_id, get_price_text(), get_back_keyboard())
+        answer_callback(callback_id)
+    
+    else:
+        logger.warning(f"کال‌بک ناشناخته: {data}")
+
+# ==================== اصلی ====================
+
+def main():
+    logger.info("🤖 ربات ReaperVoid با موفقیت راه‌اندازی شد!")
+    logger.info("📡 در حال گوش دادن به پیام‌ها...")
+    
+    offset = None
+    while True:
+        try:
+            updates = get_updates(offset)
+            for update in updates:
+                offset = update["update_id"] + 1
+                
+                if "message" in update:
+                    handle_message(update)
+                
+                if "callback_query" in update:
+                    handle_callback(update)
+                        
+        except Exception as e:
+            logger.error(f"خطا در حلقه اصلی: {e}")
+            time.sleep(5)
+        
+        time.sleep(1)
+
+if __name__ == "__main__":
+    main()
