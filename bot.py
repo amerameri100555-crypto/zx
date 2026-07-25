@@ -14,6 +14,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ==================== تنظیمات قفل خدمات ====================
+# دیکشنری برای ذخیره وضعیت قفل در هر گروه
+service_lock_status = {}  # {chat_id: True/False}
+
 # ==================== متن‌ها ====================
 
 def get_start_text(user_id, first_name):
@@ -70,7 +74,7 @@ def get_start_text(user_id, first_name):
 【 <b>Licenced By 🆉︎🆇︎</b> 】
 """
 
-def get_welcome_text(first_name):
+def get_welcome_text(first_name, group_name, user_id):
     now = datetime.now()
     jalali = jdatetime.datetime.fromgregorian(datetime=now)
     weekdays = {6: 'شنبه', 0: 'یکشنبه', 1: 'دوشنبه', 2: 'سه‌شنبه', 3: 'چهارشنبه', 4: 'پنج‌شنبه', 5: 'جمعه'}
@@ -79,14 +83,12 @@ def get_welcome_text(first_name):
     time_str = f"{jalali.hour:02d}:{jalali.minute:02d}:{jalali.second:02d}"
     
     return f"""
-⫸ سلام <b>{first_name} عزیز</b> 🌹
+⫸ سلام <a href="tg://user?id={user_id}">{first_name}</a> عزیز 🌹
 
-◄  به گروه <b>ReaperVoid</b> خوش اومدی 💐
+◄ به گروه <b>{group_name}</b> خوش اومدی 💐
 
-─┅━━━━━━━┅─
-
-📆 تاریخ : <b>{date_str}</b>
-⏰ ساعت : <b>{time_str}</b>
+◂ تاریخ : <b>{date_str}</b> 📆
+◂ ساعت : <b>{time_str}</b> ⏰
 """
 
 def get_unknown_text():
@@ -283,6 +285,18 @@ def send_message(chat_id, text, keyboard=None, reply_to_message_id=None):
         logger.error(f"خطا: {e}")
         return None
 
+def delete_message(chat_id, message_id):
+    url = f"{BASE_URL}/deleteMessage"
+    payload = {"chat_id": chat_id, "message_id": message_id}
+    try:
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+            logger.error(f"خطا در حذف پیام: {response.text}")
+        return response
+    except Exception as e:
+        logger.error(f"خطا در حذف پیام: {e}")
+        return None
+
 def edit_message(chat_id, message_id, text, keyboard=None):
     url = f"{BASE_URL}/editMessageText"
     payload = {
@@ -311,6 +325,24 @@ def answer_callback(callback_id):
     except Exception as e:
         logger.error(f"خطا در پاسخ کال‌بک: {e}")
 
+def get_chat_member(chat_id, user_id):
+    url = f"{BASE_URL}/getChatMember"
+    payload = {"chat_id": chat_id, "user_id": user_id}
+    try:
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            return response.json().get("result", {})
+        return {}
+    except Exception as e:
+        logger.error(f"خطا در دریافت اطلاعات کاربر: {e}")
+        return {}
+
+def is_admin(chat_id, user_id):
+    """بررسی اینکه کاربر ادمین یا مالک گروه است"""
+    member = get_chat_member(chat_id, user_id)
+    status = member.get("status", "")
+    return status in ["creator", "administrator"]
+
 def get_updates(offset=None):
     url = f"{BASE_URL}/getUpdates"
     params = {"timeout": 30, "offset": offset}
@@ -329,24 +361,75 @@ def handle_message(update):
     message = update.get("message", {})
     chat_id = message.get("chat", {}).get("id")
     message_id = message.get("message_id")
+    chat_type = message.get("chat", {}).get("type")
+    
+    # فقط در گروه‌ها پردازش کن
+    if chat_type not in ["group", "supergroup"]:
+        return
+    
+    # گرفتن اطلاعات کاربر فرستنده
     user = message.get("from", {})
     user_id = user.get("id", 0)
     first_name = user.get("first_name", "کاربر")
-    text = message.get("text", "").strip()
+    text = message.get("text", "").strip().lower()
     
     if not chat_id:
         return
     
-    # چک کردن کاربر جدید برای خوش‌آمدگویی
-    if "new_chat_members" in message:
-        for member in message["new_chat_members"]:
-            member_name = member.get("first_name", "کاربر")
-            welcome_text = get_welcome_text(member_name)
-            send_message(chat_id, welcome_text)
-            logger.info(f"👋 خوش‌آمدگویی به {member_name}")
+    # ===== مدیریت پیام‌های خدماتی تلگرام =====
+    # اگر قفل خدمات فعال باشد، پیام‌های خدماتی رو حذف کن
+    if service_lock_status.get(chat_id, False):
+        # پیام ورود عضو جدید
+        if "new_chat_members" in message:
+            for member in message["new_chat_members"]:
+                member_name = member.get("first_name", "کاربر")
+                member_id = member.get("id")
+                # حذف پیام خدماتی تلگرام
+                delete_message(chat_id, message_id)
+                # ارسال خوش‌آمدگویی
+                group_name = message.get("chat", {}).get("title", "گروه")
+                welcome_text = get_welcome_text(member_name, group_name, member_id)
+                send_message(chat_id, welcome_text)
+                logger.info(f"👋 خوش‌آمدگویی به {member_name} در گروه {group_name}")
+            return
+        
+        # پیام خروج عضو
+        if "left_chat_member" in message:
+            delete_message(chat_id, message_id)
+            logger.info(f"🚪 پیام خروج حذف شد")
+            return
+        
+        # پیام دعوت به ویسکال (پیام‌های سیستمی)
+        # این پیام‌ها معمولاً به صورت new_chat_members نمی‌آیند
+        # ولی برای ایمنی بیشتر، همه پیام‌های بدون متن رو حذف می‌کنیم
+        if not text and not message.get("new_chat_members") and not message.get("left_chat_member"):
+            delete_message(chat_id, message_id)
+            return
+    
+    # ===== دستورات =====
+    # دستور قفل خدمات تلگرام (فقط ادمین‌ها و سازنده)
+    if text == "قفل خدمات تلگرام" or text == "/lock_service":
+        if is_admin(chat_id, user_id):
+            service_lock_status[chat_id] = True
+            response_text = "<b>◂ قفل خدمات تلگرام فعال شد !</b>"
+            send_message(chat_id, response_text, reply_to_message_id=message_id)
+            logger.info(f"🔒 قفل خدمات در گروه {chat_id} توسط {first_name} فعال شد")
+        else:
+            send_message(chat_id, "❌ شما دسترسی لازم برای این کار را ندارید!", reply_to_message_id=message_id)
         return
     
-    # دستور استارت
+    # دستور باز کردن خدمات تلگرام (فقط ادمین‌ها و سازنده)
+    if text == "باز کردن خدمات تلگرام" or text == "/unlock_service":
+        if is_admin(chat_id, user_id):
+            service_lock_status[chat_id] = False
+            response_text = "<b>◂ قفل خدمات تلگرام غیر فعال شد !</b>"
+            send_message(chat_id, response_text, reply_to_message_id=message_id)
+            logger.info(f"🔓 قفل خدمات در گروه {chat_id} توسط {first_name} غیرفعال شد")
+        else:
+            send_message(chat_id, "❌ شما دسترسی لازم برای این کار را ندارید!", reply_to_message_id=message_id)
+        return
+    
+    # ===== مدیریت استارت =====
     if text == "/start":
         start_text = get_start_text(user_id, first_name)
         keyboard = get_main_keyboard()
@@ -354,7 +437,7 @@ def handle_message(update):
         logger.info(f"📨 ارسال استارت به {first_name}")
         return
     
-    # پیام‌های ناشناخته
+    # ===== پیام‌های ناشناخته =====
     if text:
         unknown_text = get_unknown_text()
         send_message(chat_id, unknown_text, None, reply_to_message_id=message_id)
