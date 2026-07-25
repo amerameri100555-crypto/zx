@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # ==================== توابع تشخیص پورن ====================
 
 def download_file(file_id):
+    """دانلود فایل از تلگرام"""
     url = f"{BASE_URL}/getFile"
     payload = {"file_id": file_id}
     try:
@@ -43,30 +44,42 @@ def download_file(file_id):
         return None
 
 def check_nsfw_image(image_bytes):
+    """بررسی تصویر با API DeepAI برای تشخیص پورن"""
     try:
         url = "https://api.deepai.org/api/nsfw-detector"
         files = {'image': ('image.jpg', image_bytes, 'image/jpeg')}
         headers = {'api-key': DEEPAI_API_KEY}
+        
         response = requests.post(url, files=files, headers=headers, timeout=30)
+        
         if response.status_code == 200:
             result = response.json()
             nsfw_score = result.get("output", {}).get("nsfw_score", 0)
             logger.info(f"🔍 نمره NSFW: {nsfw_score}")
             return nsfw_score > 0.7
-        return False
+        else:
+            logger.error(f"❌ خطا در API: {response.status_code} - {response.text}")
+            return False
+            
     except Exception as e:
         logger.error(f"❌ خطا در تشخیص پورن: {e}")
         return False
 
 def is_nsfw_media(file_id, file_type):
+    """تشخیص محتوای پورن بر اساس نوع فایل"""
     file_bytes = download_file(file_id)
     if not file_bytes:
         return False
+    
+    # برای عکس و استیکر
     if file_type in ["photo", "sticker"]:
         return check_nsfw_image(file_bytes)
+    
+    # برای ویدیو و گیف (فعلاً غیرفعال)
     return False
 
 def is_user_blocked(chat_id, user_id):
+    """بررسی اینکه کاربر محدود شده یا نه"""
     if chat_id not in porn_blocked_users:
         return False
     if user_id not in porn_blocked_users[chat_id]:
@@ -427,32 +440,60 @@ def handle_message(update):
     
     if chat_type in ["group", "supergroup"]:
         
-        # قفل پورن
+        # ===== قفل پورن =====
         if porn_lock_status.get(chat_id, False):
+            
+            # اگر کاربر قبلاً محدود شده
             if is_user_blocked(chat_id, user_id):
                 delete_message(chat_id, message_id)
+                logger.info(f"🔞 کاربر {first_name} محدود شده، پیام حذف شد")
                 return
             
             is_nsfw = False
+            file_type = None
+            
+            # بررسی عکس
             if "photo" in message:
                 photo = message["photo"][-1]
                 file_id = photo["file_id"]
                 is_nsfw = is_nsfw_media(file_id, "photo")
+                file_type = "photo"
+            # بررسی استیکر
             elif "sticker" in message:
                 file_id = message["sticker"]["file_id"]
                 is_nsfw = is_nsfw_media(file_id, "sticker")
+                file_type = "sticker"
+            # بررسی ویدیو
+            elif "video" in message:
+                file_id = message["video"]["file_id"]
+                is_nsfw = is_nsfw_media(file_id, "video")
+                file_type = "video"
+            # بررسی گیف
+            elif "animation" in message:
+                file_id = message["animation"]["file_id"]
+                is_nsfw = is_nsfw_media(file_id, "animation")
+                file_type = "animation"
+            # بررسی ویدیو نوت
+            elif "video_note" in message:
+                file_id = message["video_note"]["file_id"]
+                is_nsfw = is_nsfw_media(file_id, "video_note")
+                file_type = "video_note"
             
+            # اگر محتوا پورن بود
             if is_nsfw:
                 delete_message(chat_id, message_id)
+                
+                # محدود کردن کاربر به مدت 7 روز
                 if chat_id not in porn_blocked_users:
                     porn_blocked_users[chat_id] = {}
                 porn_blocked_users[chat_id][user_id] = datetime.now() + timedelta(days=7)
+                
                 block_text = get_block_message(first_name, user_id)
                 send_message(chat_id, block_text)
-                logger.info(f"🔞 پورن حذف شد از {first_name}")
+                logger.info(f"🔞 پورن حذف شد از {first_name} و محدود شد")
                 return
         
-        # خدمات تلگرام
+        # ===== خدمات تلگرام =====
         if service_lock_status.get(chat_id, False):
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
@@ -478,7 +519,7 @@ def handle_message(update):
                     send_message(chat_id, welcome_text)
                 return
         
-        # دستورات ادمین
+        # ===== دستورات ادمین =====
         if is_admin(chat_id, user_id):
             if text in ["قفل خدمات تلگرام", "/lock_service"]:
                 service_lock_status[chat_id] = True
@@ -497,17 +538,19 @@ def handle_message(update):
                 send_message(chat_id, "<b>◄ خوش آمدگویی غیرفعال شد !</b>", reply_to_message_id=message_id)
                 return
         
-        # دستورات سازنده
+        # ===== دستورات سازنده =====
         if user_id == OWNER_ID:
             if text in ["قفل پورن", "/lock_porn"]:
                 porn_lock_status[chat_id] = True
                 send_message(chat_id, "<b>◂ قفل پورن فعال شد !</b>", reply_to_message_id=message_id)
+                logger.info(f"🔞 قفل پورن فعال شد در گروه {chat_id}")
                 return
             if text in ["باز کردن پورن", "/unlock_porn"]:
                 porn_lock_status[chat_id] = False
                 if chat_id in porn_blocked_users:
                     del porn_blocked_users[chat_id]
                 send_message(chat_id, "<b>◂ قفل پورن غیر فعال شد !</b>", reply_to_message_id=message_id)
+                logger.info(f"🔞 قفل پورن غیرفعال شد در گروه {chat_id}")
                 return
         
         if text == "/start":
