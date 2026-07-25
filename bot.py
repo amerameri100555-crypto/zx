@@ -220,29 +220,36 @@ def get_price_text():
 # ==================== کیبورد ====================
 
 def get_main_keyboard():
+    """دکمه‌های منوی اصلی با چیدمان 1-3-1-2-1"""
     keyboard = [
+        # ردیف 1: یک دکمه (اضافه کردن به گروه)
         [
-            {"text": "📢 کانال ربات", "url": "https://t.me/ReaperVoidTM"}
+            {"text": "➕ اضافه کردن به گروه", "url": "https://t.me/ReaperVoidbot?startgroup=new"}
         ],
+        # ردیف 2: سه دکمه (اطلاعات بیشتر، راهنمای تست، تفاوت رایگان با اشتراکی)
         [
-            {"text": "👨‍💻 پشتیبانی", "url": "https://t.me/XMrAmer"},
-            {"text": "➕ اضافه کردن به گروه", "url": "https://t.me/ReaperVoidbot?startgroup=new"},
-            {"text": "💬 گروه پشتیبانی", "url": "https://t.me/ReaperVoidGP"}
-        ],
-        [
-            {"text": "📓 اطلاعات بیشتر", "callback_data": "info"}
-        ],
-        [
+            {"text": "📓 اطلاعات بیشتر", "callback_data": "info"},
             {"text": "🗒 راهنمای تست", "callback_data": "test"},
             {"text": "🦾 تفاوت رایگان با اشتراکی", "callback_data": "compare"}
         ],
+        # ردیف 3: یک دکمه (نرخ ربات)
         [
             {"text": "💎 نرخ ربات", "callback_data": "price"}
+        ],
+        # ردیف 4: دو دکمه (پشتیبانی و گروه پشتیبانی)
+        [
+            {"text": "👨‍💻 پشتیبانی", "url": "https://t.me/XMrAmer"},
+            {"text": "💬 گروه پشتیبانی", "url": "https://t.me/ReaperVoidGP"}
+        ],
+        # ردیف 5: یک دکمه (کانال ربات)
+        [
+            {"text": "📢 کانال ربات", "url": "https://t.me/ReaperVoidTM"}
         ]
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
 def get_back_keyboard():
+    """دکمه بازگشت به منوی اصلی"""
     keyboard = [
         [{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back"}]
     ]
