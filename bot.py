@@ -1,6 +1,7 @@
 import requests
 import time
 import logging
+import json
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
@@ -53,25 +54,41 @@ def get_start_text(user_id, first_name):
 
 💳 همین حالا سفارش بده!
  
-🖥️ <b>ساخته شده توسط تیم ZX</b>
+💻 <b>ساخته شده توسط تیم ZX</b>
 
 ⚠️ تذکر حقوقی :
 
 ◄ <b>تمامی ایده‌ها و کدهای این ربات متعلق به تیم ZX بوده و هر گونه کپی‌برداری یا تقلید، پیگرد قانونی دارد. حقوق مادی و معنوی محفوظ است.</b>
 """
 
-def send_message(chat_id, text):
+def get_inline_keyboard():
+    """ساخت دکمه‌های شیشه‌ای"""
+    keyboard = [
+        [
+            {"text": "📢 کانال ربات", "url": "https://t.me/ReaperVoidTM"},
+            {"text": "👨‍💻 ارتباط با پشتیبانی", "url": "https://t.me/XMrAmer"}
+        ],
+        [
+            {"text": "➕ اضافه کردن به گروه", "url": "https://t.me/ReaperVoidbot?startgroup=new"},
+            {"text": "💬 گروه پشتیبانی", "url": "https://t.me/ReaperVoidGP"}
+        ]
+    ]
+    return json.dumps({"inline_keyboard": keyboard})
+
+def send_message_with_keyboard(chat_id, text, keyboard):
+    """ارسال پیام با دکمه‌های شیشه‌ای"""
     url = f"{BASE_URL}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
         "parse_mode": "HTML",
-        "disable_web_page_preview": True
+        "disable_web_page_preview": True,
+        "reply_markup": keyboard
     }
     try:
         response = requests.post(url, json=payload)
         if response.status_code != 200:
-            logger.error(f"خطا: {response.text}")
+            logger.error(f"خطا در ارسال پیام: {response.text}")
         return response
     except Exception as e:
         logger.error(f"خطا: {e}")
@@ -91,6 +108,8 @@ def get_updates(offset=None):
 
 def main():
     logger.info("🤖 ربات با موفقیت راه‌اندازی شد!")
+    logger.info("📡 در حال گوش دادن به پیام‌ها...")
+    
     offset = None
     while True:
         try:
@@ -103,12 +122,15 @@ def main():
                     user = message.get("from", {})
                     user_id = user.get("id", 0)
                     first_name = user.get("first_name", "کاربر")
+                    
                     if "text" in message and message["text"] == "/start":
                         text = get_start_text(user_id, first_name)
-                        send_message(chat_id, text)
+                        keyboard = get_inline_keyboard()
+                        send_message_with_keyboard(chat_id, text, keyboard)
                         logger.info(f"📨 ارسال استارت به {first_name}")
+                        
         except Exception as e:
-            logger.error(f"خطا: {e}")
+            logger.error(f"خطا در حلقه اصلی: {e}")
         time.sleep(1)
 
 if __name__ == "__main__":
