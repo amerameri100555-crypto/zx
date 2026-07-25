@@ -6,7 +6,10 @@ import json
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 # ==================== متن‌ها ====================
@@ -223,29 +226,23 @@ def get_unknown_text():
 def get_main_keyboard():
     """دکمه‌های منوی اصلی با چیدمان جدید"""
     keyboard = [
-        # ردیف 1: یک دکمه (اضافه کردن به گروه)
         [
             {"text": "➕ اضافه کردن به گروه", "url": "https://t.me/ReaperVoidbot?startgroup=new"}
         ],
-        # ردیف 2: دو دکمه (اطلاعات بیشتر، تفاوت رایگان با اشتراکی)
         [
             {"text": "📓 اطلاعات بیشتر", "callback_data": "info"},
             {"text": "🦾 تفاوت رایگان با اشتراکی", "callback_data": "compare"}
         ],
-        # ردیف 3: یک دکمه (راهنمای تست)
         [
             {"text": "🗒 راهنمای تست", "callback_data": "test"}
         ],
-        # ردیف 4: یک دکمه (نرخ ربات)
         [
             {"text": "💎 نرخ ربات", "callback_data": "price"}
         ],
-        # ردیف 5: دو دکمه (پشتیبانی و گروه پشتیبانی)
         [
             {"text": "👨‍💻 پشتیبانی", "url": "https://t.me/XMrAmer"},
             {"text": "💬 گروه پشتیبانی", "url": "https://t.me/ReaperVoidGP"}
         ],
-        # ردیف 6: یک دکمه (کانال ربات)
         [
             {"text": "📢 کانال ربات", "url": "https://t.me/ReaperVoidTM"}
         ]
@@ -253,7 +250,6 @@ def get_main_keyboard():
     return json.dumps({"inline_keyboard": keyboard})
 
 def get_back_keyboard():
-    """دکمه بازگشت به منوی اصلی"""
     keyboard = [
         [{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back"}]
     ]
@@ -262,15 +258,15 @@ def get_back_keyboard():
 # ==================== توابع تلگرام ====================
 
 def send_message_with_keyboard(chat_id, text, keyboard, reply_to_message_id=None):
-    """ارسال پیام با ریپلای به پیام مشخص"""
     url = f"{BASE_URL}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
         "parse_mode": "HTML",
-        "disable_web_page_preview": True,
-        "reply_markup": keyboard
+        "disable_web_page_preview": True
     }
+    if keyboard:
+        payload["reply_markup"] = keyboard
     if reply_to_message_id:
         payload["reply_to_message_id"] = reply_to_message_id
     
@@ -339,6 +335,7 @@ def main():
             for update in updates:
                 offset = update["update_id"] + 1
                 
+                # پردازش پیام‌ها
                 if "message" in update:
                     message = update["message"]
                     chat_id = message["chat"]["id"]
@@ -347,8 +344,10 @@ def main():
                     user_id = user.get("id", 0)
                     first_name = user.get("first_name", "کاربر")
                     
+                    # اگر پیام دارای متن بود
                     if "text" in message:
-                        text = message.get("text", "")
+                        text = message.get("text", "").strip()
+                        logger.info(f"📩 پیام از {first_name}: {text}")
                         
                         if text == "/start":
                             start_text = get_start_text(user_id, first_name)
@@ -359,14 +358,17 @@ def main():
                             # پاسخ به پیام‌های ناشناخته
                             unknown_text = get_unknown_text()
                             send_message_with_keyboard(chat_id, unknown_text, None, reply_to_message_id=message_id)
-                            logger.info(f"❌ پاسخ به پیام ناشناخته از {first_name}")
+                            logger.info(f"❌ پاسخ به پیام ناشناخته از {first_name}: {text}")
                 
-                if "callback_query" in update:
+                # پردازش کال‌بک‌ها
+                elif "callback_query" in update:
                     callback = update["callback_query"]
                     callback_id = callback["id"]
                     chat_id = callback["message"]["chat"]["id"]
                     message_id = callback["message"]["message_id"]
                     data = callback.get("data", "")
+                    
+                    logger.info(f"🔘 کال‌بک از {chat_id}: {data}")
                     
                     if data == "back":
                         user = callback.get("from", {})
@@ -395,6 +397,8 @@ def main():
                         
         except Exception as e:
             logger.error(f"خطا در حلقه اصلی: {e}")
+            time.sleep(5)
+        
         time.sleep(1)
 
 if __name__ == "__main__":
