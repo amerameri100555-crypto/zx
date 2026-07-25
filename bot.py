@@ -1,21 +1,15 @@
-import logging
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+import requests
+import time
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
-
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 START_TEXT = """
-🌟 <b>سلام بر تو XMrAmer عزیز</b> 🌹
+🌟 سلام بر تو XMrAmer عزیز 🌹
 
 💬 من رباتی هوشمند و قدرتمند برای مدیریت حرفه‌ای گروه‌های تلگرامی هستم!
 
-⫸ <b>برتری‌های انحصاری من :</b>
+⫸ برتری‌های انحصاری من :
 
 ◄ مجهز به پیشرفته‌ترین هوش مصنوعی روز دنیا
 ◄ فیلتر قوی تشخیص محتوای نامناسب
@@ -26,7 +20,7 @@ START_TEXT = """
 ◄ درآمدزایی هوشمند از گروه
 ◄ شناسایی کاربران مشکوک
 
-⫸ <b>ویژگی‌های منحصربفرد :</b>
+⫸ ویژگی‌های منحصربفرد :
 
 ◂ ۹۹.۹٪ آپتایم
 ◂ هاست قدرتمند و اختصاصی
@@ -39,62 +33,61 @@ START_TEXT = """
 ◂ دوره تست برای اطمینان
 ◂ کاملاً بدون تبلیغات مزاحم
 
-⫸ <b>ما شبیه هیچکس نیستیم!</b>
+⫸ ما شبیه هیچکس نیستیم!
 
 ◄ امنیت گروه، اولویت اول ماست
 ◄ کیفیت، حرف اول را می‌زند
 ◄ سرعت، مزیت رقابتی ماست
 
-⫸ <b>چرا به ما اعتماد کنیم؟</b>
+⫸ چرا به ما اعتماد کنیم؟
 
 ◂ پردازش فوق‌سریع
 ◂ پاسخگویی آنی
 ◂ آپدیت‌های مستمر
 ◂ پشتیبانی حرفه‌ای
 
-⫸ <b>همین حالا سفارش بده!</b>
+⫸ همین حالا سفارش بده!
  
-🖥️ ساخته شده توسط <b>تیم ZX</b>
+🖥️ ساخته شده توسط تیم ZX
 
-⫸ <b>تذکر حقوقی :</b>
+⫸ تذکر حقوقی :
 
 ◄ تمامی ایده‌ها و کدهای این ربات متعلق به تیم ZX بوده و هر گونه کپی‌برداری یا تقلید، پیگرد قانونی دارد. حقوق مادی و معنوی محفوظ است.
 
-✨ <b>با ما، گروهتو به اوج برسون!</b> ✨
+✨ با ما، گروهتو به اوج برسون! ✨
 """
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text(START_TEXT, parse_mode='HTML', disable_web_page_preview=True)
+def send_message(chat_id, text):
+    url = f"{BASE_URL}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    requests.post(url, json=payload)
 
-def help_command(update: Update, context: CallbackContext):
-    help_text = """
-<b>🤖 راهنمای ربات مدیریت گروه</b>
-
-◄ برای مشاهده اطلاعات ربات از دستور /start استفاده کنید
-◄ برای مشاهده راهنما از دستور /help استفاده کنید
-
-<b>⚠️ توجه:</b>
-این ربات توسط تیم ZX ساخته شده و تمام حقوق آن محفوظ است.
-"""
-    update.message.reply_text(help_text, parse_mode='HTML')
-
-def unknown(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        "❌ دستور نامعتبر!\nبرای مشاهده راهنما از /help استفاده کنید.",
-        parse_mode='HTML'
-    )
+def get_updates(offset=None):
+    url = f"{BASE_URL}/getUpdates"
+    params = {"timeout": 30, "offset": offset}
+    response = requests.get(url, params=params)
+    return response.json().get("result", [])
 
 def main():
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
-    
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("help", help_command))
-    dp.add_handler(MessageHandler(Filters.command, unknown))
-    
-    logger.info("🤖 ربات با موفقیت راه‌اندازی شد!")
-    updater.start_polling()
-    updater.idle()
+    print("🤖 ربات با موفقیت راه‌اندازی شد!")
+    offset = None
+    while True:
+        try:
+            updates = get_updates(offset)
+            for update in updates:
+                offset = update["update_id"] + 1
+                if "message" in update:
+                    message = update["message"]
+                    chat_id = message["chat"]["id"]
+                    if "text" in message and message["text"] == "/start":
+                        send_message(chat_id, START_TEXT)
+        except Exception as e:
+            print(f"Error: {e}")
+        time.sleep(1)
 
 if __name__ == "__main__":
     main()
