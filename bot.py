@@ -14,8 +14,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ==================== تنظیمات قفل خدمات ====================
-service_lock_status = {}  # {chat_id: True/False}
+# ==================== تنظیمات ====================
+service_lock_status = {}  # {chat_id: True/False} - قفل خدمات تلگرام
+welcome_status = {}       # {chat_id: True/False} - وضعیت خوش‌آمدگویی
 
 # ==================== متن‌ها ====================
 
@@ -361,7 +362,6 @@ def handle_message(update):
     message_id = message.get("message_id")
     chat_type = message.get("chat", {}).get("type")
     
-    # گرفتن اطلاعات کاربر فرستنده
     user = message.get("from", {})
     user_id = user.get("id", 0)
     first_name = user.get("first_name", "کاربر")
@@ -373,64 +373,82 @@ def handle_message(update):
     # ===== مدیریت در گروه‌ها =====
     if chat_type in ["group", "supergroup"]:
         
-        # ===== قفل خدمات تلگرام =====
+        # ===== پردازش پیام‌های خدماتی =====
+        # اگر قفل خدمات فعال باشه، پیام‌های خدماتی رو حذف کن
         if service_lock_status.get(chat_id, False):
-            # پیام ورود عضو جدید
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
                     member_name = member.get("first_name", "کاربر")
                     member_id = member.get("id")
                     delete_message(chat_id, message_id)
-                    group_name = message.get("chat", {}).get("title", "گروه")
-                    welcome_text = get_welcome_text(member_name, group_name, member_id)
-                    send_message(chat_id, welcome_text)
-                    logger.info(f"👋 خوش‌آمدگویی به {member_name} در گروه {group_name}")
+                    
+                    # اگر خوش‌آمدگویی فعال باشه، پیام خوش‌آمدگویی بفرست
+                    if welcome_status.get(chat_id, True):  # پیش‌فرض فعال
+                        group_name = message.get("chat", {}).get("title", "گروه")
+                        welcome_text = get_welcome_text(member_name, group_name, member_id)
+                        send_message(chat_id, welcome_text)
+                        logger.info(f"👋 خوش‌آمدگویی به {member_name} در گروه {group_name}")
                 return
             
-            # پیام خروج عضو
             if "left_chat_member" in message:
                 delete_message(chat_id, message_id)
                 logger.info(f"🚪 پیام خروج حذف شد")
                 return
         
+        # اگر قفل خدمات غیرفعال باشه ولی خوش‌آمدگویی فعال باشه
+        elif welcome_status.get(chat_id, True):
+            if "new_chat_members" in message:
+                for member in message["new_chat_members"]:
+                    member_name = member.get("first_name", "کاربر")
+                    member_id = member.get("id")
+                    group_name = message.get("chat", {}).get("title", "گروه")
+                    welcome_text = get_welcome_text(member_name, group_name, member_id)
+                    send_message(chat_id, welcome_text)
+                    logger.info(f"👋 خوش‌آمدگویی به {member_name} در گروه {group_name}")
+                return
+        
         # ===== دستورات گروه (فقط ادمین‌ها) =====
-        # قفل خدمات تلگرام
-        if text == "قفل خدمات تلگرام" or text == "/lock_service":
-            if is_admin(chat_id, user_id):
+        if is_admin(chat_id, user_id):
+            
+            # قفل خدمات تلگرام
+            if text == "قفل خدمات تلگرام" or text == "/lock_service":
                 service_lock_status[chat_id] = True
                 response_text = "<b>◂ قفل خدمات تلگرام فعال شد !</b>"
                 send_message(chat_id, response_text, reply_to_message_id=message_id)
                 logger.info(f"🔒 قفل خدمات در گروه {chat_id} توسط {first_name} فعال شد")
-            else:
-                send_message(chat_id, "❌ شما دسترسی لازم برای این کار را ندارید!", reply_to_message_id=message_id)
-            return
-        
-        # باز کردن خدمات تلگرام
-        if text == "باز کردن خدمات تلگرام" or text == "/unlock_service":
-            if is_admin(chat_id, user_id):
+                return
+            
+            # باز کردن خدمات تلگرام
+            if text == "باز کردن خدمات تلگرام" or text == "/unlock_service":
                 service_lock_status[chat_id] = False
                 response_text = "<b>◂ قفل خدمات تلگرام غیر فعال شد !</b>"
                 send_message(chat_id, response_text, reply_to_message_id=message_id)
                 logger.info(f"🔓 قفل خدمات در گروه {chat_id} توسط {first_name} غیرفعال شد")
-            else:
-                send_message(chat_id, "❌ شما دسترسی لازم برای این کار را ندارید!", reply_to_message_id=message_id)
-            return
-        
-        # ===== پیام‌های ناشناخته در گروه =====
-        # اگر پیام استارت نباشه، نادیده بگیر (در گروه استارت کار نمیکنه)
-        if text and text != "/start":
-            # در گروه هیچ پاسخ ناشناخته‌ای نمیده
-            pass
+                return
+            
+            # خوش‌آمدگویی فعال
+            if text == "خوش آمدگویی فعال" or text == "/enable_welcome":
+                welcome_status[chat_id] = True
+                response_text = "<b>◄ خوش آمدگویی فعال شد !</b>"
+                send_message(chat_id, response_text, reply_to_message_id=message_id)
+                logger.info(f"✅ خوش‌آمدگویی در گروه {chat_id} توسط {first_name} فعال شد")
+                return
+            
+            # خوش‌آمدگویی غیرفعال
+            if text == "خوش آمدگویی غیرفعال" or text == "/disable_welcome":
+                welcome_status[chat_id] = False
+                response_text = "<b>◄ خوش آمدگویی غیرفعال شد !</b>"
+                send_message(chat_id, response_text, reply_to_message_id=message_id)
+                logger.info(f"❌ خوش‌آمدگویی در گروه {chat_id} توسط {first_name} غیرفعال شد")
+                return
         
         # ===== استارت در گروه (نادیده گرفته میشه) =====
         if text == "/start":
-            # در گروه کاری انجام نمیده
             return
     
     # ===== مدیریت در پیوی (Private) =====
     elif chat_type == "private":
         
-        # ===== دستور استارت =====
         if text == "/start":
             start_text = get_start_text(user_id, first_name)
             keyboard = get_main_keyboard()
@@ -438,7 +456,6 @@ def handle_message(update):
             logger.info(f"📨 ارسال استارت به {first_name} در پیوی")
             return
         
-        # ===== پیام‌های ناشناخته در پیوی =====
         if text:
             unknown_text = get_unknown_text()
             send_message(chat_id, unknown_text, None, reply_to_message_id=message_id)
