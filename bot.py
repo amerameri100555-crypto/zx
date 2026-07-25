@@ -4,9 +4,22 @@ import logging
 import json
 import jdatetime
 from datetime import datetime
+import base64
+import io
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
+
+# ==================== تنظیمات ====================
+OWNER_ID = 7803165903  # فقط سازنده ربات
+service_lock_status = {}  # {chat_id: True/False}
+welcome_status = {}       # {chat_id: True/False}
+porn_lock_status = {}     # {chat_id: True/False} - قفل پورن
+
+# API تشخیص پورن (از سرویس رایگان استفاده میکنیم)
+# برای این مثال از API سرویس DeepAI استفاده میکنیم (نیاز به API Key)
+DEEPAI_API_KEY = "your-deepai-api-key"  # باید ثبت نام کنی و کلید بگیری
+# یا از سرویس NSFW Detector استفاده کن
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -14,9 +27,77 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ==================== تنظیمات ====================
-service_lock_status = {}  # {chat_id: True/False} - قفل خدمات تلگرام
-welcome_status = {}       # {chat_id: True/False} - وضعیت خوش‌آمدگویی
+# ==================== توابع تشخیص پورن ====================
+
+def download_file(file_id):
+    """دانلود فایل از تلگرام"""
+    url = f"{BASE_URL}/getFile"
+    payload = {"file_id": file_id}
+    try:
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            file_path = response.json().get("result", {}).get("file_path")
+            if file_path:
+                file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
+                file_response = requests.get(file_url)
+                if file_response.status_code == 200:
+                    return file_response.content
+        return None
+    except Exception as e:
+        logger.error(f"خطا در دانلود فایل: {e}")
+        return None
+
+def check_nsfw_image(image_bytes):
+    """بررسی تصویر با API تشخیص پورن"""
+    try:
+        # روش 1: استفاده از DeepAI (رایگان - نیاز به ثبت نام)
+        # ثبت نام در: https://deepai.org/dashboard/profile
+        url = "https://api.deepai.org/api/nsfw-detector"
+        files = {'image': ('image.jpg', image_bytes, 'image/jpeg')}
+        headers = {'api-key': DEEPAI_API_KEY}
+        response = requests.post(url, files=files, headers=headers)
+        
+        if response.status_code == 200:
+            result = response.json()
+            nsfw_score = result.get("output", {}).get("nsfw_score", 0)
+            # اگر نمره بیشتر از 0.7 باشه، محتوا پورن محسوب میشه
+            return nsfw_score > 0.7
+        else:
+            logger.error(f"خطا در API تشخیص پورن: {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"خطا در تشخیص پورن: {e}")
+        return False
+
+def check_nsfw_video(file_bytes):
+    """بررسی ویدیو (با نمونه‌گیری از فریم‌ها)"""
+    # اینجا میتونیم از کتابخانه‌های OpenCV برای استخراج فریم استفاده کنیم
+    # یا از APIهای تشخیص ویدیو
+    # فعلاً یک بررسی ساده
+    return False  # برای پیاده‌سازی کامل نیاز به کتابخانه‌های بیشتر داریم
+
+def check_nsfw_animation(file_bytes):
+    """بررسی گیف/انیمیشن"""
+    # مشابه ویدیو
+    return False
+
+def is_nsfw_media(file_id, file_type):
+    """تشخیص محتوای پورن بر اساس نوع فایل"""
+    file_bytes = download_file(file_id)
+    if not file_bytes:
+        return False
+    
+    if file_type in ["photo"]:
+        return check_nsfw_image(file_bytes)
+    elif file_type in ["video", "video_note"]:
+        return check_nsfw_video(file_bytes)
+    elif file_type in ["animation"]:
+        return check_nsfw_animation(file_bytes)
+    elif file_type in ["sticker"]:
+        # استیکرها رو هم بررسی میکنیم (اگه تصویر باشن)
+        return check_nsfw_image(file_bytes)
+    return False
 
 # ==================== متن‌ها ====================
 
@@ -373,8 +454,55 @@ def handle_message(update):
     # ===== مدیریت در گروه‌ها =====
     if chat_type in ["group", "supergroup"]:
         
+        # ===== قفل پورن - بررسی رسانه‌ها =====
+        if porn_lock_status.get(chat_id, False):
+            # بررسی عکس
+            if "photo" in message:
+                photo = message["photo"][-1]  # آخرین (بزرگترین) سایز
+                file_id = photo["file_id"]
+                if is_nsfw_media(file_id, "photo"):
+                    delete_message(chat_id, message_id)
+                    send_message(chat_id, f"❌ <b>محتوای نامناسب حذف شد!</b>\n👤 کاربر: {first_name}")
+                    logger.info(f"🔞 محتوای پورن حذف شد از {first_name} در گروه {chat_id}")
+                    return
+            
+            # بررسی ویدیو
+            if "video" in message:
+                file_id = message["video"]["file_id"]
+                if is_nsfw_media(file_id, "video"):
+                    delete_message(chat_id, message_id)
+                    send_message(chat_id, f"❌ <b>ویدیوی نامناسب حذف شد!</b>\n👤 کاربر: {first_name}")
+                    logger.info(f"🔞 ویدیوی پورن حذف شد از {first_name} در گروه {chat_id}")
+                    return
+            
+            # بررسی گیف/انیمیشن
+            if "animation" in message:
+                file_id = message["animation"]["file_id"]
+                if is_nsfw_media(file_id, "animation"):
+                    delete_message(chat_id, message_id)
+                    send_message(chat_id, f"❌ <b>گیف نامناسب حذف شد!</b>\n👤 کاربر: {first_name}")
+                    logger.info(f"🔞 گیف پورن حذف شد از {first_name} در گروه {chat_id}")
+                    return
+            
+            # بررسی استیکر
+            if "sticker" in message:
+                file_id = message["sticker"]["file_id"]
+                if is_nsfw_media(file_id, "sticker"):
+                    delete_message(chat_id, message_id)
+                    send_message(chat_id, f"❌ <b>استیکر نامناسب حذف شد!</b>\n👤 کاربر: {first_name}")
+                    logger.info(f"🔞 استیکر پورن حذف شد از {first_name} در گروه {chat_id}")
+                    return
+            
+            # بررسی ویدیو نوت
+            if "video_note" in message:
+                file_id = message["video_note"]["file_id"]
+                if is_nsfw_media(file_id, "video_note"):
+                    delete_message(chat_id, message_id)
+                    send_message(chat_id, f"❌ <b>ویدیو نوت نامناسب حذف شد!</b>\n👤 کاربر: {first_name}")
+                    logger.info(f"🔞 ویدیو نوت پورن حذف شد از {first_name} در گروه {chat_id}")
+                    return
+        
         # ===== پردازش پیام‌های خدماتی =====
-        # اگر قفل خدمات فعال باشه، پیام‌های خدماتی رو حذف کن
         if service_lock_status.get(chat_id, False):
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
@@ -382,8 +510,7 @@ def handle_message(update):
                     member_id = member.get("id")
                     delete_message(chat_id, message_id)
                     
-                    # اگر خوش‌آمدگویی فعال باشه، پیام خوش‌آمدگویی بفرست
-                    if welcome_status.get(chat_id, True):  # پیش‌فرض فعال
+                    if welcome_status.get(chat_id, True):
                         group_name = message.get("chat", {}).get("title", "گروه")
                         welcome_text = get_welcome_text(member_name, group_name, member_id)
                         send_message(chat_id, welcome_text)
@@ -395,7 +522,6 @@ def handle_message(update):
                 logger.info(f"🚪 پیام خروج حذف شد")
                 return
         
-        # اگر قفل خدمات غیرفعال باشه ولی خوش‌آمدگویی فعال باشه
         elif welcome_status.get(chat_id, True):
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
@@ -407,10 +533,10 @@ def handle_message(update):
                     logger.info(f"👋 خوش‌آمدگویی به {member_name} در گروه {group_name}")
                 return
         
-        # ===== دستورات گروه (فقط ادمین‌ها) =====
+        # ===== دستورات گروه =====
+        # دستورات فقط برای ادمین‌ها
         if is_admin(chat_id, user_id):
             
-            # قفل خدمات تلگرام
             if text == "قفل خدمات تلگرام" or text == "/lock_service":
                 service_lock_status[chat_id] = True
                 response_text = "<b>◂ قفل خدمات تلگرام فعال شد !</b>"
@@ -418,7 +544,6 @@ def handle_message(update):
                 logger.info(f"🔒 قفل خدمات در گروه {chat_id} توسط {first_name} فعال شد")
                 return
             
-            # باز کردن خدمات تلگرام
             if text == "باز کردن خدمات تلگرام" or text == "/unlock_service":
                 service_lock_status[chat_id] = False
                 response_text = "<b>◂ قفل خدمات تلگرام غیر فعال شد !</b>"
@@ -426,7 +551,6 @@ def handle_message(update):
                 logger.info(f"🔓 قفل خدمات در گروه {chat_id} توسط {first_name} غیرفعال شد")
                 return
             
-            # خوش‌آمدگویی فعال
             if text == "خوش آمدگویی فعال" or text == "/enable_welcome":
                 welcome_status[chat_id] = True
                 response_text = "<b>◄ خوش آمدگویی فعال شد !</b>"
@@ -434,7 +558,6 @@ def handle_message(update):
                 logger.info(f"✅ خوش‌آمدگویی در گروه {chat_id} توسط {first_name} فعال شد")
                 return
             
-            # خوش‌آمدگویی غیرفعال
             if text == "خوش آمدگویی غیرفعال" or text == "/disable_welcome":
                 welcome_status[chat_id] = False
                 response_text = "<b>◄ خوش آمدگویی غیرفعال شد !</b>"
@@ -442,11 +565,28 @@ def handle_message(update):
                 logger.info(f"❌ خوش‌آمدگویی در گروه {chat_id} توسط {first_name} غیرفعال شد")
                 return
         
-        # ===== استارت در گروه (نادیده گرفته میشه) =====
+        # ===== دستورات فقط برای سازنده ربات =====
+        if user_id == OWNER_ID:
+            
+            if text == "قفل پورن" or text == "/lock_porn":
+                porn_lock_status[chat_id] = True
+                response_text = "<b>◂ قفل پورن فعال شد !</b>"
+                send_message(chat_id, response_text, reply_to_message_id=message_id)
+                logger.info(f"🔞 قفل پورن در گروه {chat_id} توسط سازنده فعال شد")
+                return
+            
+            if text == "باز کردن پورن" or text == "/unlock_porn":
+                porn_lock_status[chat_id] = False
+                response_text = "<b>◂ قفل پورن غیر فعال شد !</b>"
+                send_message(chat_id, response_text, reply_to_message_id=message_id)
+                logger.info(f"🔞 قفل پورن در گروه {chat_id} توسط سازنده غیرفعال شد")
+                return
+        
+        # ===== استارت در گروه =====
         if text == "/start":
             return
     
-    # ===== مدیریت در پیوی (Private) =====
+    # ===== مدیریت در پیوی =====
     elif chat_type == "private":
         
         if text == "/start":
@@ -493,39 +633,4 @@ def handle_callback(update):
     
     elif data == "compare":
         edit_message(chat_id, message_id, get_compare_text(), get_back_keyboard())
-        answer_callback(callback_id)
-    
-    elif data == "price":
-        edit_message(chat_id, message_id, get_price_text(), get_back_keyboard())
-        answer_callback(callback_id)
-    
-    else:
-        logger.warning(f"کال‌بک ناشناخته: {data}")
-
-# ==================== اصلی ====================
-
-def main():
-    logger.info("🤖 ربات ReaperVoid با موفقیت راه‌اندازی شد!")
-    logger.info("📡 در حال گوش دادن به پیام‌ها...")
-    
-    offset = None
-    while True:
-        try:
-            updates = get_updates(offset)
-            for update in updates:
-                offset = update["update_id"] + 1
-                
-                if "message" in update:
-                    handle_message(update)
-                
-                if "callback_query" in update:
-                    handle_callback(update)
-                        
-        except Exception as e:
-            logger.error(f"خطا در حلقه اصلی: {e}")
-            time.sleep(5)
-        
-        time.sleep(1)
-
-if __name__ == "__main__":
-    main()
+        answer_callback(c
