@@ -1,4 +1,3 @@
-```python
 import requests
 import time
 import logging
@@ -221,28 +220,22 @@ def get_price_text():
 # ==================== کیبورد ====================
 
 def get_main_keyboard():
-    """دکمه‌های منوی اصلی با چیدمان 1-3-1-2-1"""
     keyboard = [
-        # ردیف 1: یک دکمه
         [
             {"text": "📢 کانال ربات", "url": "https://t.me/ReaperVoidTM"}
         ],
-        # ردیف 2: سه دکمه
         [
             {"text": "👨‍💻 پشتیبانی", "url": "https://t.me/XMrAmer"},
             {"text": "➕ اضافه کردن به گروه", "url": "https://t.me/ReaperVoidbot?startgroup=new"},
             {"text": "💬 گروه پشتیبانی", "url": "https://t.me/ReaperVoidGP"}
         ],
-        # ردیف 3: یک دکمه
         [
             {"text": "📓 اطلاعات بیشتر", "callback_data": "info"}
         ],
-        # ردیف 4: دو دکمه
         [
             {"text": "🗒 راهنمای تست", "callback_data": "test"},
             {"text": "🦾 تفاوت رایگان با اشتراکی", "callback_data": "compare"}
         ],
-        # ردیف 5: یک دکمه (آخر)
         [
             {"text": "💎 نرخ ربات", "callback_data": "price"}
         ]
@@ -250,7 +243,6 @@ def get_main_keyboard():
     return json.dumps({"inline_keyboard": keyboard})
 
 def get_back_keyboard():
-    """دکمه بازگشت به منوی اصلی"""
     keyboard = [
         [{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back"}]
     ]
@@ -383,4 +375,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
