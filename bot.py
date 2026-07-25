@@ -211,28 +211,31 @@ def get_price_text():
 # ==================== کیبورد ====================
 
 def get_main_keyboard():
-    """دکمه‌های منوی اصلی با چیدمان 1-3-1-2-1"""
+    """دکمه‌های منوی اصلی با چیدمان جدید"""
     keyboard = [
         # ردیف 1: یک دکمه (اضافه کردن به گروه)
         [
             {"text": "➕ اضافه کردن به گروه", "url": "https://t.me/ReaperVoidbot?startgroup=new"}
         ],
-        # ردیف 2: سه دکمه (اطلاعات بیشتر، راهنمای تست، تفاوت رایگان با اشتراکی)
+        # ردیف 2: دو دکمه (اطلاعات بیشتر، تفاوت رایگان با اشتراکی)
         [
             {"text": "📓 اطلاعات بیشتر", "callback_data": "info"},
-            {"text": "🗒 راهنمای تست", "callback_data": "test"},
             {"text": "🦾 تفاوت رایگان با اشتراکی", "callback_data": "compare"}
         ],
-        # ردیف 3: یک دکمه (نرخ ربات)
+        # ردیف 3: یک دکمه (راهنمای تست)
+        [
+            {"text": "🗒 راهنمای تست", "callback_data": "test"}
+        ],
+        # ردیف 4: یک دکمه (نرخ ربات)
         [
             {"text": "💎 نرخ ربات", "callback_data": "price"}
         ],
-        # ردیف 4: دو دکمه (پشتیبانی و گروه پشتیبانی)
+        # ردیف 5: دو دکمه (پشتیبانی و گروه پشتیبانی)
         [
             {"text": "👨‍💻 پشتیبانی", "url": "https://t.me/XMrAmer"},
             {"text": "💬 گروه پشتیبانی", "url": "https://t.me/ReaperVoidGP"}
         ],
-        # ردیف 5: یک دکمه (کانال ربات)
+        # ردیف 6: یک دکمه (کانال ربات)
         [
             {"text": "📢 کانال ربات", "url": "https://t.me/ReaperVoidTM"}
         ]
@@ -248,7 +251,8 @@ def get_back_keyboard():
 
 # ==================== توابع تلگرام ====================
 
-def send_message_with_keyboard(chat_id, text, keyboard):
+def send_message_with_keyboard(chat_id, text, keyboard, reply_to_message_id=None):
+    """ارسال پیام با ریپلای به پیام مشخص"""
     url = f"{BASE_URL}/sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -257,6 +261,9 @@ def send_message_with_keyboard(chat_id, text, keyboard):
         "disable_web_page_preview": True,
         "reply_markup": keyboard
     }
+    if reply_to_message_id:
+        payload["reply_to_message_id"] = reply_to_message_id
+    
     try:
         response = requests.post(url, json=payload)
         if response.status_code != 200:
@@ -325,6 +332,7 @@ def main():
                 if "message" in update:
                     message = update["message"]
                     chat_id = message["chat"]["id"]
+                    message_id = message["message_id"]
                     user = message.get("from", {})
                     user_id = user.get("id", 0)
                     first_name = user.get("first_name", "کاربر")
@@ -332,8 +340,9 @@ def main():
                     if "text" in message and message["text"] == "/start":
                         text = get_start_text(user_id, first_name)
                         keyboard = get_main_keyboard()
-                        send_message_with_keyboard(chat_id, text, keyboard)
-                        logger.info(f"📨 ارسال استارت به {first_name}")
+                        # ارسال پیام با ریپلای به پیام استارت کاربر
+                        send_message_with_keyboard(chat_id, text, keyboard, reply_to_message_id=message_id)
+                        logger.info(f"📨 ارسال استارت با ریپلای به {first_name}")
                 
                 if "callback_query" in update:
                     callback = update["callback_query"]
