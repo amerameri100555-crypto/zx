@@ -446,8 +446,7 @@ def get_back_keyboard():
 
 def get_panel_keyboard():
     keyboard = [
-        [{"text": "🔒 قفل‌ها", "callback_data": "locks"}],
-        [{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back"}]
+        [{"text": "🔒 قفل‌ها", "callback_data": "locks"}]
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
@@ -455,6 +454,47 @@ def get_panel_text():
     return """
 ⫸ <b>لطفا بخش مورد نظر خود را انتخاب کنید :</b>
 """
+
+def get_locks_text(chat_id):
+    service_status = "🟢 فعال" if service_lock_status.get(chat_id, False) else "🔴 غیرفعال"
+    welcome_status_text = "🟢 فعال" if welcome_status.get(chat_id, True) else "🔴 غیرفعال"
+    
+    return f"""
+⫸ <b>پنل تنظیمات گروه :</b>
+
+پنل اصلی ◄ قفلها ◂ بخش اول
+
+◄ <b>وضعیت قفل‌ها :</b>
+
+🔒 قفل خدمات تلگرام : {service_status}
+👋 خوش آمدگویی : {welcome_status_text}
+"""
+
+def get_locks_keyboard(chat_id):
+    service_status = service_lock_status.get(chat_id, False)
+    
+    if service_status:
+        service_text = "🔓 باز کردن خدمات تلگرام"
+        service_data = "unlock_service"
+    else:
+        service_text = "🔒 قفل خدمات تلگرام"
+        service_data = "lock_service"
+    
+    welcome_status_text = welcome_status.get(chat_id, True)
+    
+    if welcome_status_text:
+        welcome_text = "🔴 غیرفعال کردن خوش آمدگویی"
+        welcome_data = "disable_welcome"
+    else:
+        welcome_text = "🟢 فعال کردن خوش آمدگویی"
+        welcome_data = "enable_welcome"
+    
+    keyboard = [
+        [{"text": service_text, "callback_data": service_data}],
+        [{"text": welcome_text, "callback_data": welcome_data}],
+        [{"text": "🔙 بازگشت به پنل", "callback_data": "panel_back"}]
+    ]
+    return json.dumps({"inline_keyboard": keyboard})
 
 # ==================== پردازش ====================
 
@@ -543,7 +583,7 @@ def handle_message(update):
                 send_message(chat_id, panel_text, keyboard, reply_to_message_id=message_id)
             return
         
-        # ===== پاکسازی کامل گروه (حلقه نامحدود) =====
+        # ===== پاکسازی کامل گروه =====
         if text == "پاکسازی گروه":
             if is_admin(chat_id, user_id) or user_id == OWNER_ID:
                 msg = send_message(chat_id, "<b>⫸ پاکسازی گروه شروع شد لطفا صبر نمایید !</b>", reply_to_message_id=message_id)
@@ -656,26 +696,61 @@ def handle_callback(update):
     
     logger.info(f"🔘 کال‌بک: {data}")
     
-    # ===== پنل مدیریت =====
-    if data == "locks":
-        locks_text = """
-🔒 <b>قفل‌های ربات</b>
-
-◄ <b>قفل خدمات تلگرام</b> : {} 
-◄ <b>خوش آمدگویی</b> : {}
-
-◄ برای تغییر هر بخش از دستورات زیر استفاده کنید :
-
-• قفل خدمات تلگرام
-• باز کردن خدمات تلگرام
-• خوش آمدگویی فعال
-• خوش آمدگویی غیرفعال
-""".format("🟢 فعال" if service_lock_status.get(chat_id, False) else "🔴 غیرفعال", "🟢 فعال" if welcome_status.get(chat_id, True) else "🔴 غیرفعال")
-        
-        edit_message(chat_id, message_id, locks_text, get_panel_keyboard())
+    # ===== فقط ادمین‌ها، مالک و برنامه نویس =====
+    if not (is_admin(chat_id, user_id) or user_id == OWNER_ID):
         answer_callback(callback_id)
         return
     
+    # ===== پنل قفل‌ها =====
+    if data == "locks":
+        locks_text = get_locks_text(chat_id)
+        keyboard = get_locks_keyboard(chat_id)
+        edit_message(chat_id, message_id, locks_text, keyboard)
+        answer_callback(callback_id)
+        return
+    
+    if data == "panel_back":
+        panel_text = get_panel_text()
+        keyboard = get_panel_keyboard()
+        edit_message(chat_id, message_id, panel_text, keyboard)
+        answer_callback(callback_id)
+        return
+    
+    # ===== قفل خدمات تلگرام =====
+    if data == "lock_service":
+        service_lock_status[chat_id] = True
+        locks_text = get_locks_text(chat_id)
+        keyboard = get_locks_keyboard(chat_id)
+        edit_message(chat_id, message_id, locks_text, keyboard)
+        answer_callback(callback_id)
+        return
+    
+    if data == "unlock_service":
+        service_lock_status[chat_id] = False
+        locks_text = get_locks_text(chat_id)
+        keyboard = get_locks_keyboard(chat_id)
+        edit_message(chat_id, message_id, locks_text, keyboard)
+        answer_callback(callback_id)
+        return
+    
+    # ===== خوش آمدگویی =====
+    if data == "enable_welcome":
+        welcome_status[chat_id] = True
+        locks_text = get_locks_text(chat_id)
+        keyboard = get_locks_keyboard(chat_id)
+        edit_message(chat_id, message_id, locks_text, keyboard)
+        answer_callback(callback_id)
+        return
+    
+    if data == "disable_welcome":
+        welcome_status[chat_id] = False
+        locks_text = get_locks_text(chat_id)
+        keyboard = get_locks_keyboard(chat_id)
+        edit_message(chat_id, message_id, locks_text, keyboard)
+        answer_callback(callback_id)
+        return
+    
+    # ===== دکمه‌های برنامه نویس =====
     if user_id == OWNER_ID:
         if data == "stats":
             stats_text = get_stats_text()
@@ -727,40 +802,4 @@ def handle_callback(update):
             answer_callback(callback_id)
             return
     
-    if data == "back":
-        if user_id == OWNER_ID:
-            text = get_owner_start_text(user_id, first_name)
-            keyboard = get_owner_keyboard()
-        else:
-            text = get_start_text(user_id, first_name)
-            keyboard = get_main_keyboard()
-        edit_message(chat_id, message_id, text, keyboard)
-        answer_callback(callback_id)
-    
-    elif data == "info":
-        edit_message(chat_id, message_id, get_info_text(), get_back_keyboard())
-        answer_callback(callback_id)
-    
-    elif data == "compare":
-        edit_message(chat_id, message_id, get_compare_text(), get_back_keyboard())
-        answer_callback(callback_id)
-
-def main():
-    logger.info("🤖 ربات ReaperVoid راه‌اندازی شد!")
-    offset = None
-    while True:
-        try:
-            updates = get_updates(offset)
-            for update in updates:
-                offset = update["update_id"] + 1
-                if "message" in update:
-                    handle_message(update)
-                if "callback_query" in update:
-                    handle_callback(update)
-        except Exception as e:
-            logger.error(f"خطا: {e}")
-            time.sleep(5)
-        time.sleep(1)
-
-if __name__ == "__main__":
-    main()
+    # =
