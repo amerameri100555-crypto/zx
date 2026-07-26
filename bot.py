@@ -18,15 +18,9 @@ welcome_status = {}
 porn_lock_status = {}
 porn_blocked_users = {}
 
-# ==================== لیست کلمات نامناسب ====================
-NSFW_KEYWORDS = [
-    'پورن', 'سکسی', 'برهنه', 'کیر', 'کس', 'حشر', 'گاییدن', 'مکیدن',
-    'فحش', 'فحاشی', 'مست', 'خون', 'قتل', 'تجاوز', 'خشونت',
-    'مواد مخدر', 'شیشه', 'کراک', 'هروئین', 'ماریجوانا', 'گل',
-    'porn', 'sex', 'nude', 'fuck', 'kill', 'murder', 'rape',
-    'violence', 'drug', 'cocaine', 'heroin', 'marijuana',
-    'penis', 'vagina', 'sexual', 'nsfw'
-]
+# ==================== لیست کلمات نامناسب (فقط رسانه‌ها) ====================
+# این لیست رو خالی میذاریم چون فقط رسانه‌ها رو بررسی میکنیم
+NSFW_KEYWORDS = []  # خالی - فقط رسانه‌ها چک میشن
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -53,15 +47,6 @@ def download_file(file_id):
         logger.error(f"خطا در دانلود فایل: {e}")
         return None
 
-def check_nsfw_text(text):
-    if not text:
-        return False
-    text_lower = text.lower()
-    for keyword in NSFW_KEYWORDS:
-        if keyword.lower() in text_lower:
-            return True
-    return False
-
 def check_nsfw_image_simple(image_bytes):
     try:
         image = Image.open(BytesIO(image_bytes))
@@ -82,9 +67,8 @@ def check_nsfw_image_simple(image_bytes):
         logger.error(f"خطا در تشخیص تصویر: {e}")
         return False
 
-def is_nsfw_media(file_id, file_type, text=None):
-    if text and check_nsfw_text(text):
-        return True
+def is_nsfw_media(file_id, file_type):
+    """فقط رسانه‌ها رو بررسی کن - بدون بررسی متن"""
     if not file_id:
         return False
     file_bytes = download_file(file_id)
@@ -110,10 +94,19 @@ def get_block_message(first_name, user_id):
     return f"""
 ⫸ کاربر گرامی : <a href="tg://user?id={user_id}">{first_name}</a> 
 
-◄ استفاده از رسانه مستهجن و محتوای نامناسب ممنوع است ، لذا پیام شما حذف می شود و برای مدتی از ارسال رسانه محدود می شوید !
-
-◂ مدت زمان محدود شده از ارسال رسانه : <b>۷ روز</b>
+◄ استفاده از رسانه مستهجن ممنوع است ، لذا پیام شما حذف می شود و برای مدت <b>۷ روز</b> از ارسال هرگونه رسانه (عکس، فیلم، گیف، استیکر) محدود می شوید !
 """
+
+# ==================== توابع تاریخ و زمان ایران ====================
+
+def get_iran_time():
+    now = datetime.now()
+    jalali = jdatetime.datetime.fromgregorian(datetime=now)
+    weekdays = {6: 'شنبه', 0: 'یکشنبه', 1: 'دوشنبه', 2: 'سه‌شنبه', 3: 'چهارشنبه', 4: 'پنج‌شنبه', 5: 'جمعه'}
+    weekday_name = weekdays.get(jalali.weekday(), '')
+    date_str = f"{weekday_name} {jalali.day} - {jalali.month} - {jalali.year}"
+    time_str = f"{jalali.hour:02d}:{jalali.minute:02d}:{jalali.second:02d}"
+    return date_str, time_str
 
 # ==================== متن‌ها ====================
 
@@ -172,12 +165,7 @@ def get_start_text(user_id, first_name):
 """
 
 def get_welcome_text(first_name, group_name, user_id):
-    now = datetime.now()
-    jalali = jdatetime.datetime.fromgregorian(datetime=now)
-    weekdays = {6: 'شنبه', 0: 'یکشنبه', 1: 'دوشنبه', 2: 'سه‌شنبه', 3: 'چهارشنبه', 4: 'پنج‌شنبه', 5: 'جمعه'}
-    weekday_name = weekdays.get(jalali.weekday(), '')
-    date_str = f"{weekday_name} {jalali.day} - {jalali.month} - {jalali.year}"
-    time_str = f"{jalali.hour:02d}:{jalali.minute:02d}:{jalali.second:02d}"
+    date_str, time_str = get_iran_time()
     return f"""
 ⫸ سلام <a href="tg://user?id={user_id}">{first_name}</a> عزیز 🌹
 
@@ -455,8 +443,10 @@ def handle_message(update):
     
     if chat_type in ["group", "supergroup"]:
         
-        # قفل پورن
+        # ===== قفل پورن - فقط رسانه‌ها =====
         if porn_lock_status.get(chat_id, False):
+            
+            # اگر کاربر قبلاً محدود شده
             if is_user_blocked(chat_id, user_id):
                 delete_message(chat_id, message_id)
                 return
@@ -465,29 +455,60 @@ def handle_message(update):
             file_id = None
             file_type = None
             
+            # بررسی عکس
             if "photo" in message:
                 photo = message["photo"][-1]
                 file_id = photo["file_id"]
                 file_type = "photo"
-                is_nsfw = is_nsfw_media(file_id, file_type, text)
+                is_nsfw = is_nsfw_media(file_id, file_type)
+            
+            # بررسی استیکر
             elif "sticker" in message:
                 file_id = message["sticker"]["file_id"]
                 file_type = "sticker"
-                is_nsfw = is_nsfw_media(file_id, file_type, text)
-            elif text:
-                is_nsfw = is_nsfw_media(None, None, text)
+                is_nsfw = is_nsfw_media(file_id, file_type)
             
-            if is_nsfw:
+            # بررسی ویدیو
+            elif "video" in message:
+                file_id = message["video"]["file_id"]
+                file_type = "video"
+                is_nsfw = is_nsfw_media(file_id, file_type)
+            
+            # بررسی گیف
+            elif "animation" in message:
+                file_id = message["animation"]["file_id"]
+                file_type = "animation"
+                is_nsfw = is_nsfw_media(file_id, file_type)
+            
+            # بررسی ویدیو نوت
+            elif "video_note" in message:
+                file_id = message["video_note"]["file_id"]
+                file_type = "video_note"
+                is_nsfw = is_nsfw_media(file_id, file_type)
+            
+            # اگر محتوا پورن بود - فقط رسانه‌ها
+            if is_nsfw and file_id:
+                # حذف پیام
                 delete_message(chat_id, message_id)
+                
+                # محدود کردن کاربر از ارسال رسانه به مدت 7 روز
                 if chat_id not in porn_blocked_users:
                     porn_blocked_users[chat_id] = {}
                 porn_blocked_users[chat_id][user_id] = datetime.now() + timedelta(days=7)
+                
+                # ارسال اخطار
                 block_text = get_block_message(first_name, user_id)
-                send_message(chat_id, block_text)
-                logger.info(f"🔞 پورن حذف شد از {first_name}")
+                warning_msg = send_message(chat_id, block_text)
+                
+                # حذف اخطار بعد از 10 ثانیه
+                if warning_msg:
+                    time.sleep(10)
+                    delete_message(chat_id, warning_msg.get("result", {}).get("message_id"))
+                
+                logger.info(f"🔞 رسانه پورن از {first_name} حذف و محدود شد")
                 return
         
-        # خدمات تلگرام
+        # ===== خدمات تلگرام =====
         if service_lock_status.get(chat_id, False):
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
@@ -497,7 +518,11 @@ def handle_message(update):
                     if welcome_status.get(chat_id, True):
                         group_name = message.get("chat", {}).get("title", "گروه")
                         welcome_text = get_welcome_text(member_name, group_name, member_id)
-                        send_message(chat_id, welcome_text)
+                        welcome_msg = send_message(chat_id, welcome_text)
+                        # حذف خوش‌آمدگویی بعد از 10 ثانیه
+                        if welcome_msg:
+                            time.sleep(10)
+                            delete_message(chat_id, welcome_msg.get("result", {}).get("message_id"))
                 return
             if "left_chat_member" in message:
                 delete_message(chat_id, message_id)
@@ -510,10 +535,14 @@ def handle_message(update):
                     member_id = member.get("id")
                     group_name = message.get("chat", {}).get("title", "گروه")
                     welcome_text = get_welcome_text(member_name, group_name, member_id)
-                    send_message(chat_id, welcome_text)
+                    welcome_msg = send_message(chat_id, welcome_text)
+                    # حذف خوش‌آمدگویی بعد از 10 ثانیه
+                    if welcome_msg:
+                        time.sleep(10)
+                        delete_message(chat_id, welcome_msg.get("result", {}).get("message_id"))
                 return
         
-        # دستورات ادمین
+        # ===== دستورات ادمین =====
         if is_admin(chat_id, user_id):
             if text in ["قفل خدمات تلگرام", "/lock_service"]:
                 service_lock_status[chat_id] = True
@@ -532,7 +561,7 @@ def handle_message(update):
                 send_message(chat_id, "<b>◄ خوش آمدگویی غیرفعال شد !</b>", reply_to_message_id=message_id)
                 return
         
-        # دستورات سازنده
+        # ===== دستورات سازنده =====
         if user_id == OWNER_ID:
             if text in ["قفل پورن", "/lock_porn"]:
                 porn_lock_status[chat_id] = True
