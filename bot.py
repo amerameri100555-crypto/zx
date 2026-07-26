@@ -798,4 +798,9 @@ def handle_callback(update):
             answer_callback(callback_id)
             return
     
-    # ===== دکمه
+    # ===== دکمه‌های عمومی =====
+    if data == "back":
+        if user_id == OWNER_ID:
+            text = get_owner_start_text(user_id, first_name)
+            keyboard = get_owner_keyboard()
+        else
