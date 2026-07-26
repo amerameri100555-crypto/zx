@@ -795,4 +795,7 @@ def handle_callback(update):
 ⫸ تاریخ انقضا : <b>{get_iran_time()[0]}</b>
 """
             edit_message(chat_id, message_id, credit_text, get_owner_keyboard())
-            answer_callback(c
+            answer_callback(callback_id)
+            return
+    
+    # ===== دکمه
