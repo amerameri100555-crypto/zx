@@ -670,6 +670,4 @@ def handle_callback(update):
         edit_message(chat_id, message_id, get_test_guide_text(), get_back_keyboard())
         answer_callback(callback_id)
     
-    elif data == "compare":
-        edit_message(chat_id, message_id, get_compare_text(), get_back_keyboard())
-       
+    elif data == "
