@@ -14,7 +14,6 @@ OWNER_ID = 7803165903
 service_lock_status = {}
 welcome_status = {}
 
-# آمار ربات
 bot_stats = {
     "total_users": 0,
     "total_groups": 0,
@@ -803,4 +802,5 @@ def handle_callback(update):
         if user_id == OWNER_ID:
             text = get_owner_start_text(user_id, first_name)
             keyboard = get_owner_keyboard()
-        else
+        else:
+            text = get_start
