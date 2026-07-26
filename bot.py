@@ -14,6 +14,14 @@ OWNER_ID = 7803165903
 service_lock_status = {}
 welcome_status = {}
 
+# آمار ربات
+bot_stats = {
+    "total_users": 0,
+    "total_groups": 0,
+    "users_list": [],
+    "groups_list": []
+}
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -92,7 +100,6 @@ def get_chat_member(chat_id, user_id):
         return {}
 
 def promote_owner(chat_id, user_id):
-    """ادمین کردن سازنده ربات با تمام دسترسی‌ها"""
     url = f"{BASE_URL}/promoteChatMember"
     payload = {
         "chat_id": chat_id,
@@ -123,7 +130,6 @@ def promote_owner(chat_id, user_id):
         return False
 
 def set_owner_title(chat_id, user_id):
-    """تنظیم لقب برای سازنده"""
     url = f"{BASE_URL}/setChatAdministratorCustomTitle"
     payload = {
         "chat_id": chat_id,
@@ -165,6 +171,104 @@ def delete_message_after_delay(chat_id, message_id, delay=10):
         delete_message(chat_id, message_id)
     import threading
     threading.Thread(target=delete_later, daemon=True).start()
+
+def get_group_info(chat_id):
+    """دریافت اطلاعات کامل گروه"""
+    url = f"{BASE_URL}/getChat"
+    payload = {"chat_id": chat_id}
+    try:
+        response = requests.get(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            return response.json().get("result", {})
+        return {}
+    except Exception as e:
+        logger.error(f"خطا در دریافت اطلاعات گروه: {e}")
+        return {}
+
+def get_user_info(user_id):
+    """دریافت اطلاعات کاربر"""
+    url = f"{BASE_URL}/getChat"
+    payload = {"chat_id": user_id}
+    try:
+        response = requests.get(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            return response.json().get("result", {})
+        return {}
+    except Exception as e:
+        logger.error(f"خطا در دریافت اطلاعات کاربر: {e}")
+        return {}
+
+def send_report_to_owner(chat_id, user_id, user_name):
+    """ارسال گزارش به سازنده"""
+    group_info = get_group_info(chat_id)
+    group_name = group_info.get("title", "بدون نام")
+    group_link = f"https://t.me/{group_info.get('username', '')}" if group_info.get('username') else "لینک موجود نیست"
+    member_count = group_info.get("members_count", "نامشخص")
+    description = group_info.get("description", "بدون توضیحات")
+    
+    report_text = f"""
+📊 <b>گزارش اضافه شدن ربات به گروه</b>
+
+⫸ کاربر : <a href="tg://user?id={user_id}">{user_name}</a>
+⫸ گروه : <b>{group_name}</b>
+⫸ لینک : {group_link}
+⫸ تعداد اعضا : <b>{member_count}</b>
+⫸ توضیحات : {description}
+⫸ تاریخ : <b>{get_iran_time()[0]}</b>
+⫸ ساعت : <b>{get_iran_time()[1]}</b>
+"""
+    send_message(OWNER_ID, report_text)
+    logger.info(f"📨 گزارش به سازنده ارسال شد: {user_name} - {group_name}")
+
+def get_stats_text():
+    """متن آمار ربات"""
+    total_users = len(bot_stats["users_list"])
+    total_groups = len(bot_stats["groups_list"])
+    
+    users_text = "\n".join([f"◄ {u}" for u in bot_stats["users_list"][-10:]]) if bot_stats["users_list"] else "◄ هنوز کاربری ثبت نشده"
+    groups_text = "\n".join([f"◄ {g}" for g in bot_stats["groups_list"][-10:]]) if bot_stats["groups_list"] else "◄ هنوز گروهی ثبت نشده"
+    
+    return f"""
+📊 <b>آمار ربات ReaperVoid</b>
+
+⫸ <b>آمار کلی :</b>
+
+◄ تعداد کل کاربران : <b>{total_users}</b>
+◄ تعداد کل گروه‌ها : <b>{total_groups}</b>
+
+⫸ <b>۱۰ کاربر اخیر :</b>
+{users_text}
+
+⫸ <b>۱۰ گروه اخیر :</b>
+{groups_text}
+"""
+
+def get_owner_start_text(user_id, first_name):
+    return f"""
+🌟 <b>سلام بر تو <a href="tg://user?id={user_id}">{first_name}</a> برنامه نویس عزیز</b> 🌹
+
+⫸ به پنل مدیریت ربات <b>ReaperVoid</b> خوش آمدید !
+
+◄ از اینجا می‌توانید تمامی تنظیمات و آمار ربات را مدیریت کنید.
+
+◂ <b>📊 وضعیت فعلی :</b>
+
+• تعداد کل کاربران : <b>{len(bot_stats["users_list"])}</b>
+• تعداد کل گروه‌ها : <b>{len(bot_stats["groups_list"])}</b>
+
+──┅┅┅┅┅┅┅┅┅┅┅┅┅──
+
+🔰 <b>منوی مدیریت :</b>
+"""
+
+def get_owner_keyboard():
+    keyboard = [
+        [{"text": "📊 آمار کامل", "callback_data": "stats"}],
+        [{"text": "📡 بررسی پینگ", "callback_data": "ping"}],
+        [{"text": "⏳ اعتبار هاست", "callback_data": "credit"}],
+        [{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back_owner"}]
+    ]
+    return json.dumps({"inline_keyboard": keyboard})
 
 # ==================== متن‌ها ====================
 
@@ -308,14 +412,29 @@ def handle_message(update):
             for member in message["new_chat_members"]:
                 member_id = member.get("id")
                 if member_id == OWNER_ID:
-                    # ادمین کردن سازنده
                     promote_owner(chat_id, member_id)
-                    # تنظیم لقب
                     set_owner_title(chat_id, member_id)
-                    # ارسال پیام خوش‌آمدگویی به سازنده
-                    send_message(chat_id, f"🌟 <b>به گروه خوش آمدید سازنده عزیز!</b>\n\nشما با موفقیت ادمین شدید و لقب <b>⋆ سازنده ربات ⋆</b> برای شما تنظیم شد.", reply_to_message_id=message_id)
+                    send_message(chat_id, f"""
+⫸ به گروه خوش آمدید <a href="tg://user?id={member_id}">برنامه نویس عزیز</a> !
+
+◄ شما با موفقیت ادمین شدید و لقب <b>⋆ سازنده ربات ⋆</b> برای شما تنظیم شد !
+""", reply_to_message_id=message_id)
                     logger.info(f"👑 سازنده {member_id} به گروه {chat_id} اضافه و ادمین شد")
                     return
+        
+        # ===== ارسال گزارش به سازنده =====
+        if "new_chat_members" in message:
+            for member in message["new_chat_members"]:
+                member_id = member.get("id")
+                if member_id != OWNER_ID and member_id != 777000:
+                    user_name = member.get("first_name", "کاربر") + (f" {member.get('last_name', '')}" if member.get('last_name') else "")
+                    send_report_to_owner(chat_id, member_id, user_name)
+                    # ثبت آمار
+                    if user_name not in bot_stats["users_list"]:
+                        bot_stats["users_list"].append(user_name)
+                    group_name = message.get("chat", {}).get("title", "بدون نام")
+                    if group_name not in bot_stats["groups_list"]:
+                        bot_stats["groups_list"].append(group_name)
         
         # ===== خدمات تلگرام =====
         if service_lock_status.get(chat_id, False):
@@ -354,25 +473,21 @@ def handle_message(update):
         # ===== دستورات ادمین =====
         if is_admin(chat_id, user_id):
             
-            # قفل خدمات تلگرام
             if text in ["قفل خدمات تلگرام", "/lock_service"]:
                 service_lock_status[chat_id] = True
                 send_message(chat_id, "<b>◂ قفل خدمات تلگرام فعال شد !</b>", reply_to_message_id=message_id)
                 return
             
-            # باز کردن خدمات تلگرام
             if text in ["باز کردن خدمات تلگرام", "/unlock_service"]:
                 service_lock_status[chat_id] = False
                 send_message(chat_id, "<b>◂ قفل خدمات تلگرام غیر فعال شد !</b>", reply_to_message_id=message_id)
                 return
             
-            # خوش آمدگویی فعال
             if text in ["خوش آمدگویی فعال", "/enable_welcome"]:
                 welcome_status[chat_id] = True
                 send_message(chat_id, "<b>◄ خوش آمدگویی فعال شد !</b>", reply_to_message_id=message_id)
                 return
             
-            # خوش آمدگویی غیرفعال
             if text in ["خوش آمدگویی غیرفعال", "/disable_welcome"]:
                 welcome_status[chat_id] = False
                 send_message(chat_id, "<b>◄ خوش آمدگویی غیرفعال شد !</b>", reply_to_message_id=message_id)
@@ -383,9 +498,14 @@ def handle_message(update):
     
     elif chat_type == "private":
         if text == "/start":
-            start_text = get_start_text(user_id, first_name)
-            keyboard = get_main_keyboard()
-            send_message(chat_id, start_text, keyboard, reply_to_message_id=message_id)
+            if user_id == OWNER_ID:
+                start_text = get_owner_start_text(user_id, first_name)
+                keyboard = get_owner_keyboard()
+                send_message(chat_id, start_text, keyboard, reply_to_message_id=message_id)
+            else:
+                start_text = get_start_text(user_id, first_name)
+                keyboard = get_main_keyboard()
+                send_message(chat_id, start_text, keyboard, reply_to_message_id=message_id)
             return
         if text:
             unknown_text = get_unknown_text()
@@ -398,12 +518,69 @@ def handle_callback(update):
     chat_id = callback.get("message", {}).get("chat", {}).get("id")
     message_id = callback.get("message", {}).get("message_id")
     data = callback.get("data", "")
+    user = callback.get("from", {})
+    user_id = user.get("id", 0)
+    first_name = user.get("first_name", "کاربر")
     
     if not chat_id or not data:
         return
     
     logger.info(f"🔘 کال‌بک: {data}")
     
+    # ===== دکمه‌های سازنده =====
+    if user_id == OWNER_ID:
+        if data == "stats":
+            stats_text = get_stats_text()
+            edit_message(chat_id, message_id, stats_text, get_owner_keyboard())
+            answer_callback(callback_id)
+            return
+        
+        elif data == "ping":
+            import time as t
+            start = t.time()
+            response = send_message(chat_id, "⏳ در حال بررسی...")
+            if response and response.status_code == 200:
+                end = t.time()
+                ping = round((end - start) * 1000, 2)
+                ping_text = f"""
+📡 <b>بررسی پینگ هاست</b>
+
+⫸ زمان پاسخگویی : <b>{ping} ms</b>
+⫸ وضعیت : <b>🟢 عالی</b>""" if ping < 100 else f"""
+📡 <b>بررسی پینگ هاست</b>
+
+⫸ زمان پاسخگویی : <b>{ping} ms</b>
+⫸ وضعیت : <b>🟡 قابل قبول</b>""" if ping < 300 else f"""
+📡 <b>بررسی پینگ هاست</b>
+
+⫸ زمان پاسخگویی : <b>{ping} ms</b>
+⫸ وضعیت : <b>🔴 ضعیف</b>"""
+                delete_message(chat_id, response.json().get("result", {}).get("message_id"))
+                edit_message(chat_id, message_id, ping_text, get_owner_keyboard())
+            answer_callback(callback_id)
+            return
+        
+        elif data == "credit":
+            # تاریخ انقضای هاست (مثلاً 14 روز دیگه)
+            days_left = 14  # این رو از سیستم میتونی بگیری
+            credit_text = f"""
+⏳ <b>اعتبار هاست</b>
+
+⫸ زمان باقی مانده : <b>{days_left} روز</b>
+⫸ وضعیت : <b>🟢 فعال</b>
+⫸ تاریخ انقضا : <b>{get_iran_time()[0]}</b>
+"""
+            edit_message(chat_id, message_id, credit_text, get_owner_keyboard())
+            answer_callback(callback_id)
+            return
+        
+        elif data == "back_owner":
+            text = get_owner_start_text(user_id, first_name)
+            edit_message(chat_id, message_id, text, get_owner_keyboard())
+            answer_callback(callback_id)
+            return
+    
+    # ===== دکمه‌های عمومی =====
     if data == "back":
         user = callback.get("from", {})
         user_id = user.get("id", 0)
