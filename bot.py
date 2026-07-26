@@ -7,6 +7,8 @@ import base64
 import os
 import tempfile
 import subprocess
+import numpy as np
+import cv2
 from io import BytesIO
 from datetime import datetime, timedelta
 from PIL import Image
@@ -20,7 +22,6 @@ welcome_status = {}
 porn_lock_status = {}
 porn_blocked_users = {}
 
-# ==================== تنظیمات لاگ ====================
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -162,7 +163,6 @@ def download_file(file_id):
         return None
 
 def extract_frames_from_video(video_bytes, frame_interval=2, max_frames=10):
-    """استخراج فریم از ویدیو با ffmpeg"""
     frames = []
     try:
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as f:
@@ -196,7 +196,6 @@ def extract_frames_from_video(video_bytes, frame_interval=2, max_frames=10):
         return []
 
 def extract_frames_from_gif(gif_bytes, max_frames=10):
-    """استخراج فریم از گیف با Pillow"""
     frames = []
     try:
         gif = Image.open(BytesIO(gif_bytes))
@@ -227,8 +226,20 @@ def check_nsfw_with_nudenet(image_bytes):
         return False
     
     try:
-        image = Image.open(BytesIO(image_bytes))
-        result = nude_detector.detect(image)
+        # تبدیل bytes به numpy array با OpenCV
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if img is None:
+            # اگه با cv2 نشد، با PIL امتحان کن
+            try:
+                img_pil = Image.open(BytesIO(image_bytes))
+                img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+            except:
+                return False
+        
+        # تشخیص با NudeDetector
+        result = nude_detector.detect(img)
         
         for item in result:
             label = item.get('label', '').lower()
