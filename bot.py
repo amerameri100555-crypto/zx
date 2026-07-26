@@ -280,7 +280,7 @@ def get_start_text(user_id, first_name):
 ◄ <b>کیفیت، حرف اول را می‌زند</b>
 ◄ <b>سرعت، مزیت رقابتی ماست</b>
 
-❓ چرا به ما اعتماد کنیم؟
+❓ چرا به ما اعتماد کنیم？
 
 ◂ <b>پردازش فوق‌سریع</b>
 ◂ <b>پاسخگویی آنی</b>
@@ -595,31 +595,31 @@ def handle_message(update):
         
         # ===== دستورات ادمین =====
         if is_admin(chat_id, user_id):
-            if text in ["قفل خدمات تلگرام", "/lock_service"]:
+            if text == "قفل خدمات تلگرام" or text == "/lock_service":
                 service_lock_status[chat_id] = True
                 send_message(chat_id, "<b>◂ قفل خدمات تلگرام فعال شد !</b>", reply_to_message_id=message_id)
                 return
-            if text in ["باز کردن خدمات تلگرام", "/unlock_service"]:
+            if text == "باز کردن خدمات تلگرام" or text == "/unlock_service":
                 service_lock_status[chat_id] = False
                 send_message(chat_id, "<b>◂ قفل خدمات تلگرام غیر فعال شد !</b>", reply_to_message_id=message_id)
                 return
-            if text in ["خوش آمدگویی فعال", "/enable_welcome"]:
+            if text == "خوش آمدگویی فعال" or text == "/enable_welcome":
                 welcome_status[chat_id] = True
                 send_message(chat_id, "<b>◄ خوش آمدگویی فعال شد !</b>", reply_to_message_id=message_id)
                 return
-            if text in ["خوش آمدگویی غیرفعال", "/disable_welcome"]:
+            if text == "خوش آمدگویی غیرفعال" or text == "/disable_welcome":
                 welcome_status[chat_id] = False
                 send_message(chat_id, "<b>◄ خوش آمدگویی غیرفعال شد !</b>", reply_to_message_id=message_id)
                 return
         
         # ===== دستورات سازنده =====
         if user_id == OWNER_ID:
-            if text in ["قفل پورن", "/lock_porn"]:
+            if text == "قفل پورن" or text == "/lock_porn":
                 porn_lock_status[chat_id] = True
                 send_message(chat_id, "<b>◂ قفل پورن فعال شد !</b>", reply_to_message_id=message_id)
                 logger.info(f"🔞 قفل پورن در گروه {chat_id} توسط سازنده فعال شد")
                 return
-            if text in ["باز کردن پورن", "/unlock_porn"]:
+            if text == "باز کردن پورن" or text == "/unlock_porn":
                 porn_lock_status[chat_id] = False
                 if chat_id in porn_blocked_users:
                     del porn_blocked_users[chat_id]
@@ -667,7 +667,4 @@ def handle_callback(update):
         answer_callback(callback_id)
     
     elif data == "test":
-        edit_message(chat_id, message_id, get_test_guide_text(), get_back_keyboard())
-        answer_callback(callback_id)
-    
-    elif data == "
+        edit_message(chat_id, message_id, get_test_guide_text(), get_back_keyboard
