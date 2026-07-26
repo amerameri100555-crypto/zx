@@ -173,7 +173,6 @@ def delete_message_after_delay(chat_id, message_id, delay=10):
     threading.Thread(target=delete_later, daemon=True).start()
 
 def get_group_info(chat_id):
-    """دریافت اطلاعات کامل گروه"""
     url = f"{BASE_URL}/getChat"
     payload = {"chat_id": chat_id}
     try:
@@ -186,7 +185,6 @@ def get_group_info(chat_id):
         return {}
 
 def get_user_info(user_id):
-    """دریافت اطلاعات کاربر"""
     url = f"{BASE_URL}/getChat"
     payload = {"chat_id": user_id}
     try:
@@ -199,7 +197,6 @@ def get_user_info(user_id):
         return {}
 
 def send_report_to_owner(chat_id, user_id, user_name):
-    """ارسال گزارش به سازنده"""
     group_info = get_group_info(chat_id)
     group_name = group_info.get("title", "بدون نام")
     group_link = f"https://t.me/{group_info.get('username', '')}" if group_info.get('username') else "لینک موجود نیست"
@@ -221,7 +218,6 @@ def send_report_to_owner(chat_id, user_id, user_name):
     logger.info(f"📨 گزارش به سازنده ارسال شد: {user_name} - {group_name}")
 
 def get_stats_text():
-    """متن آمار ربات"""
     total_users = len(bot_stats["users_list"])
     total_groups = len(bot_stats["groups_list"])
     
@@ -265,8 +261,7 @@ def get_owner_keyboard():
     keyboard = [
         [{"text": "📊 آمار کامل", "callback_data": "stats"}],
         [{"text": "📡 بررسی پینگ", "callback_data": "ping"}],
-        [{"text": "⏳ اعتبار هاست", "callback_data": "credit"}],
-        [{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back_owner"}]
+        [{"text": "⏳ اعتبار هاست", "callback_data": "credit"}]
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
@@ -404,10 +399,8 @@ def handle_message(update):
     if not chat_id:
         return
     
-    # ===== بررسی ورود سازنده به گروه =====
     if chat_type in ["group", "supergroup"]:
         
-        # وقتی سازنده به گروه اضافه میشه
         if "new_chat_members" in message:
             for member in message["new_chat_members"]:
                 member_id = member.get("id")
@@ -422,21 +415,18 @@ def handle_message(update):
                     logger.info(f"👑 سازنده {member_id} به گروه {chat_id} اضافه و ادمین شد")
                     return
         
-        # ===== ارسال گزارش به سازنده =====
         if "new_chat_members" in message:
             for member in message["new_chat_members"]:
                 member_id = member.get("id")
                 if member_id != OWNER_ID and member_id != 777000:
                     user_name = member.get("first_name", "کاربر") + (f" {member.get('last_name', '')}" if member.get('last_name') else "")
                     send_report_to_owner(chat_id, member_id, user_name)
-                    # ثبت آمار
                     if user_name not in bot_stats["users_list"]:
                         bot_stats["users_list"].append(user_name)
                     group_name = message.get("chat", {}).get("title", "بدون نام")
                     if group_name not in bot_stats["groups_list"]:
                         bot_stats["groups_list"].append(group_name)
         
-        # ===== خدمات تلگرام =====
         if service_lock_status.get(chat_id, False):
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
@@ -470,7 +460,6 @@ def handle_message(update):
                             delete_message_after_delay(chat_id, mid, 10)
                 return
         
-        # ===== دستورات ادمین =====
         if is_admin(chat_id, user_id):
             
             if text in ["قفل خدمات تلگرام", "/lock_service"]:
@@ -536,33 +525,41 @@ def handle_callback(update):
             return
         
         elif data == "ping":
-            import time as t
-            start = t.time()
-            response = send_message(chat_id, "⏳ در حال بررسی...")
-            if response and response.status_code == 200:
-                end = t.time()
-                ping = round((end - start) * 1000, 2)
+            # ارسال پیام "در حال بررسی..."
+            loading_msg = send_message(chat_id, "⏳ <b>در حال بررسی پینگ...</b>")
+            if loading_msg and loading_msg.status_code == 200:
+                loading_msg_id = loading_msg.json().get("result", {}).get("message_id")
+                
+                import time as t
+                start_time = t.time()
+                # یک درخواست ساده به تلگرام برای تست پینگ
+                test_url = f"{BASE_URL}/getMe"
+                requests.get(test_url, timeout=30)
+                end_time = t.time()
+                ping = round((end_time - start_time) * 1000, 2)
+                
+                # حذف پیام "در حال بررسی..."
+                delete_message(chat_id, loading_msg_id)
+                
+                if ping < 100:
+                    status_text = "🟢 عالی"
+                elif ping < 300:
+                    status_text = "🟡 قابل قبول"
+                else:
+                    status_text = "🔴 ضعیف"
+                
                 ping_text = f"""
 📡 <b>بررسی پینگ هاست</b>
 
 ⫸ زمان پاسخگویی : <b>{ping} ms</b>
-⫸ وضعیت : <b>🟢 عالی</b>""" if ping < 100 else f"""
-📡 <b>بررسی پینگ هاست</b>
-
-⫸ زمان پاسخگویی : <b>{ping} ms</b>
-⫸ وضعیت : <b>🟡 قابل قبول</b>""" if ping < 300 else f"""
-📡 <b>بررسی پینگ هاست</b>
-
-⫸ زمان پاسخگویی : <b>{ping} ms</b>
-⫸ وضعیت : <b>🔴 ضعیف</b>"""
-                delete_message(chat_id, response.json().get("result", {}).get("message_id"))
+⫸ وضعیت : <b>{status_text}</b>
+"""
                 edit_message(chat_id, message_id, ping_text, get_owner_keyboard())
             answer_callback(callback_id)
             return
         
         elif data == "credit":
-            # تاریخ انقضای هاست (مثلاً 14 روز دیگه)
-            days_left = 14  # این رو از سیستم میتونی بگیری
+            days_left = 14
             credit_text = f"""
 ⏳ <b>اعتبار هاست</b>
 
@@ -571,12 +568,6 @@ def handle_callback(update):
 ⫸ تاریخ انقضا : <b>{get_iran_time()[0]}</b>
 """
             edit_message(chat_id, message_id, credit_text, get_owner_keyboard())
-            answer_callback(callback_id)
-            return
-        
-        elif data == "back_owner":
-            text = get_owner_start_text(user_id, first_name)
-            edit_message(chat_id, message_id, text, get_owner_keyboard())
             answer_callback(callback_id)
             return
     
