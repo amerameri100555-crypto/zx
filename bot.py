@@ -4,22 +4,18 @@ import logging
 import json
 import jdatetime
 import base64
-import os
-import tempfile
-import subprocess
 from io import BytesIO
 from datetime import datetime, timedelta
-from PIL import Image
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 OWNER_ID = 7803165903
 
-# ==================== تنظیمات Sightengine ====================
-# ثبت نام در https://sightengine.com/ و دریافت API Key
-SIGHTENGINE_API_USER = "612529233"  # از سایت بگیر
-SIGHTENGINE_API_SECRET = "QAbjunjRfSbsYJxuEZYUEphbFKUpK4Jz"  # از سایت بگیر
+# ==================== API Key ها ====================
+SIGHTENGINE_API_USER = "1034163582"
+SIGHTENGINE_API_SECRET = "Q9JkCm9SfwWwNFwUDi7EhrgX58jS4TqH"
+DEEPAI_API_KEY = "eb27dd91-b502-49ea-8c59-cf8324bcef59"
 
 service_lock_status = {}
 welcome_status = {}
@@ -50,6 +46,8 @@ def send_message(chat_id, text, keyboard=None, reply_to_message_id=None):
         payload["reply_to_message_id"] = reply_to_message_id
     try:
         response = requests.post(url, json=payload, timeout=60)
+        if response.status_code != 200:
+            logger.error(f"خطا در ارسال: {response.text}")
         return response
     except Exception as e:
         logger.error(f"خطا: {e}")
@@ -60,9 +58,11 @@ def delete_message(chat_id, message_id):
     payload = {"chat_id": chat_id, "message_id": message_id}
     try:
         response = requests.post(url, json=payload, timeout=30)
+        if response.status_code != 200:
+            logger.error(f"خطا در حذف: {response.text}")
         return response
     except Exception as e:
-        logger.error(f"خطا: {e}")
+        logger.error(f"خطا در حذف: {e}")
         return None
 
 def edit_message(chat_id, message_id, text, keyboard=None):
@@ -72,6 +72,8 @@ def edit_message(chat_id, message_id, text, keyboard=None):
         payload["reply_markup"] = keyboard
     try:
         response = requests.post(url, json=payload, timeout=30)
+        if response.status_code != 200:
+            logger.error(f"خطا در ویرایش: {response.text}")
         return response
     except Exception as e:
         logger.error(f"خطا: {e}")
@@ -157,7 +159,6 @@ def download_file(file_id):
         return None
 
 def check_nsfw_with_sightengine(image_bytes):
-    """بررسی با Sightengine API (رایگان و دقیق)"""
     try:
         image_base64 = base64.b64encode(image_bytes).decode('utf-8')
         url = "https://api.sightengine.com/1.0/check.json"
@@ -171,124 +172,85 @@ def check_nsfw_with_sightengine(image_bytes):
         
         if response.status_code == 200:
             result = response.json()
-            # بررسی نمره nudity
             nudity_score = result.get("nudity", {}).get("raw", 0)
             sexual_score = result.get("nudity", {}).get("sexual_activity", 0)
-            # بررسی محتوای نامناسب
             wad = result.get("wad", {})
             gore = wad.get("gore", 0)
             violence = wad.get("violence", 0)
             
-            logger.info(f"🔍 Sightengine - Nudity: {nudity_score}, Sexual: {sexual_score}, Gore: {gore}")
+            logger.info(f"🔍 Sightengine: Nudity={nudity_score}, Sexual={sexual_score}, Gore={gore}")
             
-            # اگر هر کدوم بیشتر از 0.7 بود
-            if nudity_score > 0.7 or sexual_score > 0.7 or gore > 0.7:
+            if nudity_score > 0.6 or sexual_score > 0.6 or gore > 0.7:
                 return True
         return False
     except Exception as e:
         logger.error(f"خطا در Sightengine: {e}")
         return False
 
-def extract_frames_from_video(video_bytes, frame_interval=2, max_frames=10):
-    frames = []
+def check_nsfw_with_deepai(image_bytes):
     try:
-        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as f:
-            f.write(video_bytes)
-            video_path = f.name
-        
-        output_pattern = tempfile.mktemp(suffix='_frame_%d.jpg')
-        
-        cmd = [
-            'ffmpeg', '-i', video_path,
-            '-vf', f'fps=1/{frame_interval}',
-            '-frames:v', str(max_frames),
-            '-q:v', '2',
-            output_pattern
-        ]
-        
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-        
-        for i in range(1, max_frames + 1):
-            frame_path = output_pattern.replace('%d', str(i))
-            if os.path.exists(frame_path):
-                with open(frame_path, 'rb') as f:
-                    frames.append(f.read())
-                os.remove(frame_path)
-        
-        os.remove(video_path)
-        return frames
-        
+        url = "https://api.deepai.org/api/nsfw-detector"
+        files = {'image': ('image.jpg', image_bytes, 'image/jpeg')}
+        headers = {'api-key': DEEPAI_API_KEY}
+        response = requests.post(url, files=files, headers=headers, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            nsfw_score = result.get("output", {}).get("nsfw_score", 0)
+            logger.info(f"🔍 DeepAI: {nsfw_score}")
+            return nsfw_score > 0.7
+        return False
     except Exception as e:
-        logger.error(f"خطا در استخراج فریم: {e}")
-        return []
+        logger.error(f"خطا در DeepAI: {e}")
+        return False
 
-def extract_frames_from_gif(gif_bytes, max_frames=10):
-    frames = []
+def check_nsfw_with_nsfwapi(image_bytes):
     try:
-        gif = Image.open(BytesIO(gif_bytes))
-        frame_count = 0
-        
-        while True:
-            frame_bytes = BytesIO()
-            gif.save(frame_bytes, format='PNG')
-            frames.append(frame_bytes.getvalue())
-            frame_count += 1
-            
-            if frame_count >= max_frames:
-                break
-            
-            try:
-                gif.seek(gif.tell() + 1)
-            except EOFError:
-                break
-        
-        return frames
-        
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        url = "https://nsfwapi.xyz/api/v1/detect"
+        payload = {"image": image_base64}
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            is_nsfw = result.get("result", {}).get("nsfw", False)
+            confidence = result.get("result", {}).get("confidence", 0)
+            logger.info(f"🔍 NSFWAPI: {is_nsfw} (اطمینان: {confidence})")
+            return is_nsfw and confidence > 0.4
+        return False
     except Exception as e:
-        logger.error(f"خطا در استخراج فریم از گیف: {e}")
-        return []
+        logger.error(f"خطا در NSFWAPI: {e}")
+        return False
+
+def check_nsfw_image(image_bytes):
+    """بررسی با ۳ API مختلف - اگر یکی تشخیص داد، True برمیگردونه"""
+    
+    # 1. Sightengine (دقیق‌ترین)
+    if check_nsfw_with_sightengine(image_bytes):
+        return True
+    
+    # 2. DeepAI
+    if check_nsfw_with_deepai(image_bytes):
+        return True
+    
+    # 3. NSFW API
+    if check_nsfw_with_nsfwapi(image_bytes):
+        return True
+    
+    return False
 
 def check_nsfw_media(file_id, file_type):
     if not file_id:
+        return False
+    
+    # فقط عکس و استیکر
+    if file_type not in ["photo", "sticker"]:
         return False
     
     file_bytes = download_file(file_id)
     if not file_bytes:
         return False
     
-    # عکس و استیکر
-    if file_type in ["photo", "sticker"]:
-        return check_nsfw_with_sightengine(file_bytes)
-    
-    # ویدیو
-    elif file_type == "video":
-        frames = extract_frames_from_video(file_bytes, 2, 10)
-        for frame in frames:
-            if check_nsfw_with_sightengine(frame):
-                return True
-        return False
-    
-    # گیف
-    elif file_type == "animation":
-        frames = extract_frames_from_gif(file_bytes, 10)
-        for frame in frames:
-            if check_nsfw_with_sightengine(frame):
-                return True
-        return False
-    
-    # ویدیو نوت
-    elif file_type == "video_note":
-        frames = extract_frames_from_video(file_bytes, 2, 10)
-        for frame in frames:
-            if check_nsfw_with_sightengine(frame):
-                return True
-        return False
-    
-    # فایل
-    elif file_type == "document":
-        return False
-    
-    return False
+    return check_nsfw_image(file_bytes)
 
 def is_user_blocked(chat_id, user_id):
     if chat_id not in porn_blocked_users:
@@ -308,7 +270,7 @@ def delete_message_after_delay(chat_id, message_id, delay=10):
     import threading
     threading.Thread(target=delete_later, daemon=True).start()
 
-# ==================== متن‌ها و کیبوردها (همون قبلی) ====================
+# ==================== متن‌ها ====================
 
 def get_start_text(user_id, first_name):
     date_str, time_str = get_iran_time()
@@ -410,8 +372,6 @@ def get_info_text():
 
 ✅ سیستم <b>پاکسازی پیام‌ها</b> بسیار پیشرفته طراحی شده است.
 
-✅ سیستم <b>تشخیص ربات‌های مخرب</b> با دقت بالا طراحی شده است.
-
 ✅ این ربات توسط <b>تیم حرفه‌ای ZX</b> توسعه یافته است.
 """
 
@@ -420,12 +380,6 @@ def get_test_guide_text():
 🗒 <b>راهنمای تست ربات ReaperVoid</b>
 
 💎 برای آشنایی با قدرت و برتری ربات ReaperVoid، امکان تست <b>۳ روزه</b> تمامی قابلیت‌ها به صورت <b>کاملاً رایگان</b> فراهم شده است.
-
-🔰 <b>شرایط استفاده از طرح تست :</b>
-
-📌 گروه شما حداقل <b>۳۰ عضو فعال</b> داشته باشد.
-
-📌 تا به حال از هیچ ربات تیم ZX استفاده نکرده باشید.
 
 ✅ <b>نصب ربات در ۳ مرحله ساده :</b>
 
@@ -440,10 +394,6 @@ def get_compare_text():
     return """
 🦾 <b>تفاوت ربات رایگان با اشتراکی</b>
 
-✅ <b>ربات‌های رایگان :</b>
-
-این ربات‌ها معمولاً توسط برنامه‌نویسان نیمه‌حرفه‌ای نوشته می‌شوند و هدف اصلی آنها <b>درآمدزایی از طریق تبلیغات</b> در گروه شماست.
-
 💎 <b>ربات اشتراکی ReaperVoid (تیم ZX) :</b>
 
 ◄ <b>بدون تبلیغات</b>
@@ -452,8 +402,6 @@ def get_compare_text():
 ◄ <b>پشتیبانی ۲۴/۷</b>
 ◄ <b>آپدیت مادام‌العمر</b>
 ◄ <b>امنیت کامل</b>
-
-💎 <b>انتخاب با شماست!</b>
 """
 
 def get_price_text():
@@ -514,7 +462,9 @@ def handle_message(update):
     
     if chat_type in ["group", "supergroup"]:
         
+        # ===== قفل پورن =====
         if porn_lock_status.get(chat_id, False):
+            
             if is_user_blocked(chat_id, user_id):
                 delete_message(chat_id, message_id)
                 return
@@ -566,6 +516,7 @@ def handle_message(update):
                 logger.info(f"🔞 رسانه پورن از {first_name} حذف شد")
                 return
         
+        # ===== خدمات تلگرام =====
         if service_lock_status.get(chat_id, False):
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
@@ -599,6 +550,7 @@ def handle_message(update):
                             delete_message_after_delay(chat_id, mid, 10)
                 return
         
+        # ===== دستورات ادمین =====
         if is_admin(chat_id, user_id):
             if text in ["قفل خدمات تلگرام", "/lock_service"]:
                 service_lock_status[chat_id] = True
@@ -617,6 +569,7 @@ def handle_message(update):
                 send_message(chat_id, "<b>◄ خوش آمدگویی غیرفعال شد !</b>", reply_to_message_id=message_id)
                 return
         
+        # ===== دستورات سازنده =====
         if user_id == OWNER_ID:
             if text in ["قفل پورن", "/lock_porn"]:
                 porn_lock_status[chat_id] = True
