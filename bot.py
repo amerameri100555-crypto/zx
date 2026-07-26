@@ -11,7 +11,6 @@ from PIL import Image
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-# ==================== تنظیمات ====================
 OWNER_ID = 7803165903
 service_lock_status = {}
 welcome_status = {}
@@ -24,8 +23,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ==================== توابع تاریخ و زمان ایران ====================
-
 def get_iran_time():
     now = datetime.now()
     jalali = jdatetime.datetime.fromgregorian(datetime=now)
@@ -34,8 +31,6 @@ def get_iran_time():
     date_str = f"{weekday_name} {jalali.day} - {jalali.month} - {jalali.year}"
     time_str = f"{jalali.hour:02d}:{jalali.minute:02d}:{jalali.second:02d}"
     return date_str, time_str
-
-# ==================== توابع تلگرام ====================
 
 def send_message(chat_id, text, keyboard=None, reply_to_message_id=None):
     url = f"{BASE_URL}/sendMessage"
@@ -46,8 +41,6 @@ def send_message(chat_id, text, keyboard=None, reply_to_message_id=None):
         payload["reply_to_message_id"] = reply_to_message_id
     try:
         response = requests.post(url, json=payload, timeout=30)
-        if response.status_code != 200:
-            logger.error(f"خطا در ارسال: {response.text}")
         return response
     except Exception as e:
         logger.error(f"خطا: {e}")
@@ -58,11 +51,9 @@ def delete_message(chat_id, message_id):
     payload = {"chat_id": chat_id, "message_id": message_id}
     try:
         response = requests.post(url, json=payload, timeout=30)
-        if response.status_code != 200:
-            logger.error(f"خطا در حذف: {response.text}")
         return response
     except Exception as e:
-        logger.error(f"خطا در حذف: {e}")
+        logger.error(f"خطا: {e}")
         return None
 
 def edit_message(chat_id, message_id, text, keyboard=None):
@@ -72,8 +63,6 @@ def edit_message(chat_id, message_id, text, keyboard=None):
         payload["reply_markup"] = keyboard
     try:
         response = requests.post(url, json=payload, timeout=30)
-        if response.status_code != 200:
-            logger.error(f"خطا در ویرایش: {response.text}")
         return response
     except Exception as e:
         logger.error(f"خطا: {e}")
@@ -100,14 +89,14 @@ def get_chat_member(chat_id, user_id):
         return {}
 
 def restrict_user(chat_id, user_id, until_date):
-    """محدود کردن کامل ارسال رسانه - همه تیک‌ها برداشته میشه"""
+    """محدود کردن کامل ارسال رسانه"""
     url = f"{BASE_URL}/restrictChatMember"
     permissions = {
-        "can_send_messages": True,  # اجازه ارسال متن
-        "can_send_media_messages": False,  # ممنوعیت عکس
-        "can_send_polls": True,  # اجازه نظرسنجی
-        "can_send_other_messages": False,  # ممنوعیت سایر رسانه‌ها (فیلم، صدا، فایل، استیکر، گیف)
-        "can_add_web_page_previews": True  # اجازه پیش‌نمایش لینک
+        "can_send_messages": True,
+        "can_send_media_messages": False,
+        "can_send_polls": True,
+        "can_send_other_messages": False,
+        "can_add_web_page_previews": True
     }
     payload = {
         "chat_id": chat_id,
@@ -118,13 +107,11 @@ def restrict_user(chat_id, user_id, until_date):
     try:
         response = requests.post(url, json=payload, timeout=30)
         if response.status_code == 200:
-            logger.info(f"✅ کاربر {user_id} از ارسال رسانه محدود شد")
+            logger.info(f"✅ کاربر محدود شد")
             return True
-        else:
-            logger.error(f"❌ خطا در محدود کردن: {response.text}")
-            return False
+        return False
     except Exception as e:
-        logger.error(f"❌ خطا: {e}")
+        logger.error(f"خطا: {e}")
         return False
 
 def is_admin(chat_id, user_id):
@@ -144,8 +131,6 @@ def get_updates(offset=None):
         logger.error(f"خطا: {e}")
         return []
 
-# ==================== توابع تشخیص پورن ====================
-
 def download_file(file_id):
     url = f"{BASE_URL}/getFile"
     payload = {"file_id": file_id}
@@ -160,11 +145,11 @@ def download_file(file_id):
                     return file_response.content
         return None
     except Exception as e:
-        logger.error(f"خطا در دانلود: {e}")
+        logger.error(f"خطا: {e}")
         return None
 
-def check_nsfw_with_api(image_bytes):
-    """بررسی با API رایگان NSFW"""
+def check_nsfw_with_nsfwapi(image_bytes):
+    """بررسی با NSFW API رایگان"""
     try:
         image_base64 = base64.b64encode(image_bytes).decode('utf-8')
         url = "https://nsfwapi.xyz/api/v1/detect"
@@ -175,18 +160,16 @@ def check_nsfw_with_api(image_bytes):
             result = response.json()
             is_nsfw = result.get("result", {}).get("nsfw", False)
             confidence = result.get("result", {}).get("confidence", 0)
-            logger.info(f"🔍 API: {is_nsfw} (اطمینان: {confidence})")
+            logger.info(f"🔍 NSFW API: {is_nsfw} (اطمینان: {confidence})")
             return is_nsfw and confidence > 0.4
         return False
     except Exception as e:
-        logger.error(f"خطا در API: {e}")
+        logger.error(f"خطا در NSFW API: {e}")
         return False
 
 def check_nsfw_with_deepai(image_bytes):
-    """بررسی با DeepAI (رایگان)"""
+    """بررسی با DeepAI API رایگان"""
     try:
-        import base64
-        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
         url = "https://api.deepai.org/api/nsfw-detector"
         files = {'image': ('image.jpg', image_bytes, 'image/jpeg')}
         response = requests.post(url, files=files, timeout=30)
@@ -200,58 +183,28 @@ def check_nsfw_with_deepai(image_bytes):
         logger.error(f"خطا در DeepAI: {e}")
         return False
 
-def check_nsfw_simple(image_bytes):
-    """بررسی ساده با رنگ پوست (آخرین راه)"""
-    try:
-        image = Image.open(BytesIO(image_bytes))
-        image = image.convert('RGB')
-        pixels = list(image.getdata())
-        skin = 0
-        total = len(pixels)
-        for r, g, b in pixels:
-            if (r > 60 and g > 40 and b > 20 and
-                r > g and r > b and
-                abs(r - g) > 15 and
-                r > 95 and g > 40 and b > 20 and
-                max(r, g, b) - min(r, g, b) > 15):
-                skin += 1
-        ratio = skin / total
-        logger.info(f"🔍 رنگ پوست: {ratio:.2%}")
-        return ratio > 0.40
-    except Exception as e:
-        logger.error(f"خطا: {e}")
-        return False
+def is_nsfw_image(image_bytes):
+    """تشخیص پورن در تصویر با دو API مختلف"""
+    if check_nsfw_with_nsfwapi(image_bytes):
+        return True
+    if check_nsfw_with_deepai(image_bytes):
+        return True
+    return False
 
 def is_nsfw_media(file_id, file_type):
-    """تشخیص پورن برای همه نوع رسانه"""
+    """تشخیص پورن برای انواع رسانه"""
     if not file_id:
         return False
     
-    # دانلود فایل
-    file_bytes = download_file(file_id)
-    if not file_bytes:
-        return False
-    
-    # برای عکس و استیکر
+    # فقط عکس و استیکر رو با API بررسی کن
     if file_type in ["photo", "sticker"]:
-        if check_nsfw_with_api(file_bytes):
-            return True
-        if check_nsfw_simple(file_bytes):
-            return True
-        return False
+        file_bytes = download_file(file_id)
+        if not file_bytes:
+            return False
+        return is_nsfw_image(file_bytes)
     
-    # برای ویدیو و گیف و ویدیو نوت
-    if file_type in ["video", "animation", "video_note"]:
-        # فقط با API بررسی کن (برای سرعت)
-        if check_nsfw_with_api(file_bytes):
-            return True
-        return False
-    
-    # فایل
-    if file_type == "document":
-        # فایل‌ها رو فعلاً بررسی نمیکنیم
-        return False
-    
+    # ویدیو، گیف، ویدیو نوت، فایل: فعلاً پشتیبانی نمیشه
+    # ولی پیام رو حذف میکنیم چون رسانه‌ای فرستاده شده
     return False
 
 def is_user_blocked(chat_id, user_id):
@@ -271,8 +224,6 @@ def delete_message_after_delay(chat_id, message_id, delay=10):
         delete_message(chat_id, message_id)
     import threading
     threading.Thread(target=delete_later, daemon=True).start()
-
-# ==================== متن‌ها ====================
 
 def get_start_text(user_id, first_name):
     date_str, time_str = get_iran_time()
@@ -364,23 +315,17 @@ def get_info_text():
     return """
 📓 <b>اطلاعات بیشتر درباره ربات ReaperVoid :</b>
 
-✅ این ربات بر روی <b>سرورهای اختصاصی و باکیفیت آمستردام هلند</b> مستقر شده است که کمترین پینگ را به سرورهای تلگرام دارند و این امر موجب پردازش فوق‌سریع اطلاعات در گروه‌های بزرگ میشود.
+✅ این ربات بر روی <b>سرورهای اختصاصی و باکیفیت آمستردام هلند</b> مستقر شده است.
 
 ✅ هدف اصلی ما، <b>حفاظت کامل از گروه شما</b> در تمامی ابعاد است.
 
-✅ هیچگونه دسترسی یا سوءاستفاده‌ای از گروه شما توسط ربات انجام نخواهد شد.
-
-✅ تمامی قابلیت‌های کاربردی و مورد نیاز در این ربات پیاده‌سازی شده است.
+✅ هیچگونه دسترسی یا سوءاستفاده‌ای از گروه شما انجام نخواهد شد.
 
 ✅ ربات ReaperVoid همواره در حال <b>به‌روزرسانی و توسعه</b> است.
 
 ✅ سیستم <b>پاکسازی پیام‌ها</b> بسیار پیشرفته طراحی شده است.
 
 ✅ سیستم <b>تشخیص ربات‌های مخرب</b> با دقت بالا طراحی شده است.
-
-✅ مشتریان برای ما در اولویت هستند.
-
-✅ <b>پنل مدیریتی شیشه‌ای</b> در ربات تعبیه شده است.
 
 ✅ این ربات توسط <b>تیم حرفه‌ای ZX</b> توسعه یافته است.
 """
@@ -389,7 +334,7 @@ def get_test_guide_text():
     return """
 🗒 <b>راهنمای تست ربات ReaperVoid</b>
 
-💎 برای آشنایی با قدرت و برتری ربات ReaperVoid نسبت به سایر ربات‌های مدیریت گروه، امکان تست <b>۳ روزه</b> تمامی قابلیت‌ها به صورت <b>کاملاً رایگان</b> فراهم شده است.
+💎 برای آشنایی با قدرت و برتری ربات ReaperVoid، امکان تست <b>۳ روزه</b> تمامی قابلیت‌ها به صورت <b>کاملاً رایگان</b> فراهم شده است.
 
 🔰 <b>شرایط استفاده از طرح تست :</b>
 
@@ -410,17 +355,11 @@ def get_compare_text():
     return """
 🦾 <b>تفاوت ربات رایگان با اشتراکی</b>
 
-📘 اطلاعاتی که هر صاحب گروهی باید درباره انواع ربات‌های مدیریت گروه بداند !
-
-💫 <b>ربات اشتراکی</b> یعنی رباتی که با پرداخت هزینه، به صورت حرفه‌ای و بدون هیچگونه تبلیغاتی در اختیار شما قرار می‌گیرد.
-
 ✅ <b>ربات‌های رایگان :</b>
 
 این ربات‌ها معمولاً توسط برنامه‌نویسان نیمه‌حرفه‌ای نوشته می‌شوند و هدف اصلی آنها <b>درآمدزایی از طریق تبلیغات</b> در گروه شماست.
 
 💎 <b>ربات اشتراکی ReaperVoid (تیم ZX) :</b>
-
-ربات <b>اشتراکی ReaperVoid</b> توسط <b>تیم حرفه‌ای ZX</b> طراحی و توسعه یافته است.
 
 ◄ <b>بدون تبلیغات</b>
 ◄ <b>سرعت فوق‌العاده</b>
@@ -460,8 +399,6 @@ def get_price_text():
 🆔 @XMrAmer
 """
 
-# ==================== کیبوردها ====================
-
 def get_main_keyboard():
     keyboard = [
         [{"text": "➕ اضافه کردن به گروه", "url": "https://t.me/ReaperVoidbot?startgroup=new"}],
@@ -476,8 +413,6 @@ def get_main_keyboard():
 def get_back_keyboard():
     keyboard = [[{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back"}]]
     return json.dumps({"inline_keyboard": keyboard})
-
-# ==================== پردازش ====================
 
 def handle_message(update):
     message = update.get("message", {})
@@ -504,66 +439,95 @@ def handle_message(update):
             is_nsfw = False
             file_id = None
             file_type = None
+            has_media = False
             
             # بررسی عکس
             if "photo" in message:
                 file_id = message["photo"][-1]["file_id"]
                 file_type = "photo"
+                has_media = True
                 is_nsfw = is_nsfw_media(file_id, file_type)
             
-            # بررسی استیکر (معمولی و متحرک)
+            # بررسی استیکر
             elif "sticker" in message:
                 file_id = message["sticker"]["file_id"]
                 file_type = "sticker"
+                has_media = True
                 is_nsfw = is_nsfw_media(file_id, file_type)
             
             # بررسی ویدیو
             elif "video" in message:
                 file_id = message["video"]["file_id"]
                 file_type = "video"
+                has_media = True
+                # ویدیو رو با API بررسی کن (اگر جواب نداد، حذفش کن)
                 is_nsfw = is_nsfw_media(file_id, file_type)
+                if not is_nsfw:
+                    # اگه API تشخیص نداد، باز هم حذفش کن (برای امنیت بیشتر)
+                    is_nsfw = True
             
             # بررسی گیف
             elif "animation" in message:
                 file_id = message["animation"]["file_id"]
                 file_type = "animation"
+                has_media = True
                 is_nsfw = is_nsfw_media(file_id, file_type)
+                if not is_nsfw:
+                    is_nsfw = True
             
-            # بررسی ویدیو نوت (ویدئو مسیج)
+            # بررسی ویدیو نوت
             elif "video_note" in message:
                 file_id = message["video_note"]["file_id"]
                 file_type = "video_note"
+                has_media = True
                 is_nsfw = is_nsfw_media(file_id, file_type)
+                if not is_nsfw:
+                    is_nsfw = True
             
             # بررسی فایل
             elif "document" in message:
                 file_id = message["document"]["file_id"]
                 file_type = "document"
+                has_media = True
                 is_nsfw = is_nsfw_media(file_id, file_type)
+                if not is_nsfw:
+                    is_nsfw = True
             
-            if is_nsfw and file_id:
-                # حذف پیام
-                delete_message(chat_id, message_id)
+            # اگر رسانه‌ای فرستاده شده
+            if has_media:
+                # برای عکس و استیکر فقط در صورت NSFW بودن حذف کن
+                if file_type in ["photo", "sticker"] and is_nsfw:
+                    delete_message(chat_id, message_id)
+                    until = int((datetime.now() + timedelta(days=7)).timestamp())
+                    restrict_user(chat_id, user_id, until)
+                    if chat_id not in porn_blocked_users:
+                        porn_blocked_users[chat_id] = {}
+                    porn_blocked_users[chat_id][user_id] = datetime.now() + timedelta(days=7)
+                    block_text = get_block_message(first_name, user_id)
+                    msg = send_message(chat_id, block_text)
+                    if msg and msg.status_code == 200:
+                        mid = msg.json().get("result", {}).get("message_id")
+                        if mid:
+                            delete_message_after_delay(chat_id, mid, 10)
+                    logger.info(f"🔞 پورن از {first_name} حذف و محدود شد")
+                    return
                 
-                # محدود کردن کامل ارسال رسانه به مدت 7 روز
-                until = int((datetime.now() + timedelta(days=7)).timestamp())
-                restrict_user(chat_id, user_id, until)
-                
-                # ذخیره در لیست محدود شده‌ها
-                if chat_id not in porn_blocked_users:
-                    porn_blocked_users[chat_id] = {}
-                porn_blocked_users[chat_id][user_id] = datetime.now() + timedelta(days=7)
-                
-                # ارسال اخطار
-                block_text = get_block_message(first_name, user_id)
-                msg = send_message(chat_id, block_text)
-                if msg and msg.status_code == 200:
-                    mid = msg.json().get("result", {}).get("message_id")
-                    if mid:
-                        delete_message_after_delay(chat_id, mid, 10)
-                
-                logger.info(f"🔞 رسانه پورن از {first_name} حذف و محدود شد")
-                return
+                # برای ویدیو، گیف، ویدیو نوت، فایل (همیشه حذف کن چون نمیتونیم تشخیص بدیم)
+                elif file_type in ["video", "animation", "video_note", "document"]:
+                    delete_message(chat_id, message_id)
+                    until = int((datetime.now() + timedelta(days=7)).timestamp())
+                    restrict_user(chat_id, user_id, until)
+                    if chat_id not in porn_blocked_users:
+                        porn_blocked_users[chat_id] = {}
+                    porn_blocked_users[chat_id][user_id] = datetime.now() + timedelta(days=7)
+                    block_text = get_block_message(first_name, user_id)
+                    msg = send_message(chat_id, block_text)
+                    if msg and msg.status_code == 200:
+                        mid = msg.json().get("result", {}).get("message_id")
+                        if mid:
+                            delete_message_after_delay(chat_id, mid, 10)
+                    logger.info(f"🔞 رسانه از {first_name} حذف و محدود شد (تشخیص نشد)")
+                    return
         
         # ===== خدمات تلگرام =====
         if service_lock_status.get(chat_id, False):
@@ -599,46 +563,36 @@ def handle_message(update):
                             delete_message_after_delay(chat_id, mid, 10)
                 return
         
-        # ===== دستورات =====
-        
-        # دستورات ادمین
+        # ===== دستورات ادمین =====
         if is_admin(chat_id, user_id):
-            
-            if text in ["قفل خدمات تلگرام", "قفل خدمات تلگرام فعال", "/lock_service"]:
+            if text in ["قفل خدمات تلگرام", "/lock_service"]:
                 service_lock_status[chat_id] = True
                 send_message(chat_id, "<b>◂ قفل خدمات تلگرام فعال شد !</b>", reply_to_message_id=message_id)
                 return
-            
-            if text in ["قفل خدمات تلگرام غیرفعال", "باز کردن خدمات تلگرام", "/unlock_service"]:
+            if text in ["باز کردن خدمات تلگرام", "/unlock_service"]:
                 service_lock_status[chat_id] = False
                 send_message(chat_id, "<b>◂ قفل خدمات تلگرام غیر فعال شد !</b>", reply_to_message_id=message_id)
                 return
-            
             if text in ["خوش آمدگویی فعال", "/enable_welcome"]:
                 welcome_status[chat_id] = True
                 send_message(chat_id, "<b>◄ خوش آمدگویی فعال شد !</b>", reply_to_message_id=message_id)
                 return
-            
             if text in ["خوش آمدگویی غیرفعال", "/disable_welcome"]:
                 welcome_status[chat_id] = False
                 send_message(chat_id, "<b>◄ خوش آمدگویی غیرفعال شد !</b>", reply_to_message_id=message_id)
                 return
         
-        # دستورات سازنده
+        # ===== دستورات سازنده =====
         if user_id == OWNER_ID:
-            
-            if text in ["قفل پورن", "قفل پورن فعال", "/lock_porn"]:
+            if text in ["قفل پورن", "/lock_porn"]:
                 porn_lock_status[chat_id] = True
                 send_message(chat_id, "<b>◂ قفل پورن فعال شد !</b>", reply_to_message_id=message_id)
-                logger.info(f"🔞 قفل پورن در گروه {chat_id} فعال شد")
                 return
-            
-            if text in ["قفل پورن غیرفعال", "باز کردن پورن", "/unlock_porn"]:
+            if text in ["باز کردن پورن", "/unlock_porn"]:
                 porn_lock_status[chat_id] = False
                 if chat_id in porn_blocked_users:
                     del porn_blocked_users[chat_id]
                 send_message(chat_id, "<b>◂ قفل پورن غیر فعال شد !</b>", reply_to_message_id=message_id)
-                logger.info(f"🔞 قفل پورن در گروه {chat_id} غیرفعال شد")
                 return
         
         if text == "/start":
@@ -675,27 +629,21 @@ def handle_callback(update):
         keyboard = get_main_keyboard()
         edit_message(chat_id, message_id, text, keyboard)
         answer_callback(callback_id)
-    
     elif data == "info":
         edit_message(chat_id, message_id, get_info_text(), get_back_keyboard())
         answer_callback(callback_id)
-    
     elif data == "test":
         edit_message(chat_id, message_id, get_test_guide_text(), get_back_keyboard())
         answer_callback(callback_id)
-    
     elif data == "compare":
         edit_message(chat_id, message_id, get_compare_text(), get_back_keyboard())
         answer_callback(callback_id)
-    
     elif data == "price":
         edit_message(chat_id, message_id, get_price_text(), get_back_keyboard())
         answer_callback(callback_id)
 
-# ==================== اصلی ====================
-
 def main():
-    logger.info("🤖 ربات ReaperVoid با موفقیت راه‌اندازی شد!")
+    logger.info("🤖 ربات ReaperVoid راه‌اندازی شد!")
     offset = None
     while True:
         try:
