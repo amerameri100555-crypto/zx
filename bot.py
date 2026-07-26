@@ -466,7 +466,7 @@ def handle_message(update):
     user = message.get("from", {})
     user_id = user.get("id", 0)
     first_name = user.get("first_name", "کاربر")
-    text = message.get("text", "").strip().lower()
+    text = message.get("text", "").strip()
     
     if not chat_id:
         return
@@ -543,7 +543,7 @@ def handle_message(update):
                 send_message(chat_id, panel_text, keyboard, reply_to_message_id=message_id)
             return
         
-        # ===== پاکسازی کامل گروه =====
+        # ===== پاکسازی کامل گروه (حلقه نامحدود) =====
         if text == "پاکسازی گروه":
             if is_admin(chat_id, user_id) or user_id == OWNER_ID:
                 msg = send_message(chat_id, "<b>⫸ پاکسازی گروه شروع شد لطفا صبر نمایید !</b>", reply_to_message_id=message_id)
@@ -553,44 +553,40 @@ def handle_message(update):
                     deleted_count = 0
                     
                     try:
-                        # روش حذف با دریافت تمام پیام‌ها
-                        url = f"{BASE_URL}/getUpdates"
-                        params = {"chat_id": chat_id, "limit": 100}
-                        response = requests.get(url, params=params, timeout=30)
-                        
-                        if response.status_code == 200:
-                            updates = response.json().get("result", [])
-                            if updates:
+                        offset = None
+                        while True:
+                            url = f"{BASE_URL}/getUpdates"
+                            params = {"chat_id": chat_id, "limit": 100}
+                            if offset:
+                                params["offset"] = offset
+                            
+                            response = requests.get(url, params=params, timeout=30)
+                            
+                            if response.status_code == 200:
+                                updates = response.json().get("result", [])
+                                
+                                if not updates:
+                                    break
+                                
                                 for update in updates:
                                     if "message" in update:
                                         mid = update["message"]["message_id"]
                                         delete_message(chat_id, mid)
                                         deleted_count += 1
-                                        time.sleep(0.05)
+                                        time.sleep(0.02)
                                 
-                                # ادامه برای پیام‌های بیشتر
-                                while True:
-                                    params["offset"] = updates[-1]["update_id"] + 1
-                                    response = requests.get(url, params=params, timeout=30)
-                                    if response.status_code == 200:
-                                        updates = response.json().get("result", [])
-                                        if not updates:
-                                            break
-                                        for update in updates:
-                                            if "message" in update:
-                                                mid = update["message"]["message_id"]
-                                                delete_message(chat_id, mid)
-                                                deleted_count += 1
-                                                time.sleep(0.05)
-                                    else:
-                                        break
-                                
-                                edit_message(chat_id, msg_id, f"<b>◄ پاکسازی گروه با موفقیت انجام شد !</b>\n🗑 تعداد پیام‌های حذف شده: {deleted_count}")
+                                if updates:
+                                    offset = updates[-1]["update_id"] + 1
+                                else:
+                                    break
                             else:
-                                edit_message(chat_id, msg_id, "<b>◄ هیچ پیامی برای پاکسازی وجود نداشت !</b>")
+                                logger.error(f"❌ خطا در دریافت پیام‌ها: {response.text}")
+                                break
+                        
+                        if deleted_count > 0:
+                            edit_message(chat_id, msg_id, f"<b>◄ پاکسازی گروه با موفقیت انجام شد !</b>\n🗑 تعداد پیام‌های حذف شده: {deleted_count}")
                         else:
-                            edit_message(chat_id, msg_id, "<b>❌ خطا در پاکسازی گروه !</b>")
-                            logger.error(f"❌ خطا در پاکسازی: {response.text}")
+                            edit_message(chat_id, msg_id, "<b>◄ هیچ پیامی برای پاکسازی وجود نداشت !</b>")
                         
                         logger.info(f"🧹 پاکسازی کامل گروه {chat_id} توسط {first_name} - {deleted_count} پیام")
                         
