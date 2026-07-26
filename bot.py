@@ -14,7 +14,6 @@ OWNER_ID = 7803165903
 service_lock_status = {}
 welcome_status = {}
 
-# آمار ربات
 bot_stats = {
     "total_users": 0,
     "total_groups": 0,
@@ -440,10 +439,6 @@ def get_main_keyboard():
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
-def get_back_keyboard():
-    keyboard = [[{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back"}]]
-    return json.dumps({"inline_keyboard": keyboard})
-
 def get_panel_keyboard():
     keyboard = [
         [{"text": "🔒 قفل‌ها", "callback_data": "locks"}]
@@ -802,4 +797,6 @@ def handle_callback(update):
             answer_callback(callback_id)
             return
     
-    # =
+    # ===== دکمه‌های عمومی =====
+    if data == "back":
+        text = get_start_text(user_id,
