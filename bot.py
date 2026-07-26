@@ -18,8 +18,10 @@ welcome_status = {}
 bot_stats = {
     "total_users": 0,
     "total_groups": 0,
-    "users_list": [],
-    "groups_list": []
+    "users_list": [],      # لیست نام کاربران
+    "users_id_list": [],   # لیست آیدی کاربران
+    "groups_list": [],     # لیست نام گروه‌ها
+    "groups_id_list": []   # لیست آیدی گروه‌ها
 }
 
 logging.basicConfig(
@@ -184,45 +186,72 @@ def get_group_info(chat_id):
         logger.error(f"خطا در دریافت اطلاعات گروه: {e}")
         return {}
 
-def get_user_info(user_id):
-    url = f"{BASE_URL}/getChat"
-    payload = {"chat_id": user_id}
-    try:
-        response = requests.get(url, json=payload, timeout=30)
-        if response.status_code == 200:
-            return response.json().get("result", {})
-        return {}
-    except Exception as e:
-        logger.error(f"خطا در دریافت اطلاعات کاربر: {e}")
-        return {}
-
-def send_report_to_owner(chat_id, user_id, user_name):
+def send_report_to_owner(chat_id, user_id, user_name, user_username=None):
+    """ارسال گزارش کامل به سازنده"""
     group_info = get_group_info(chat_id)
+    
     group_name = group_info.get("title", "بدون نام")
-    group_link = f"https://t.me/{group_info.get('username', '')}" if group_info.get('username') else "لینک موجود نیست"
+    group_username = group_info.get("username", "")
+    group_link = f"https://t.me/{group_username}" if group_username else "🔗 لینک عمومی ندارد"
     member_count = group_info.get("members_count", "نامشخص")
-    description = group_info.get("description", "بدون توضیحات")
+    description = group_info.get("description", "📝 توضیحاتی ثبت نشده")
+    group_type = group_info.get("type", "گروه عادی")
+    
+    user_first = user_name
+    user_link = f"<a href='tg://user?id={user_id}'>{user_first}</a>"
+    user_mention = f"@{user_username}" if user_username else f"آیدی عددی: <code>{user_id}</code>"
+    
+    date_str, time_str = get_iran_time()
     
     report_text = f"""
 📊 <b>گزارش اضافه شدن ربات به گروه</b>
 
-⫸ کاربر : <a href="tg://user?id={user_id}">{user_name}</a>
-⫸ گروه : <b>{group_name}</b>
-⫸ لینک : {group_link}
-⫸ تعداد اعضا : <b>{member_count}</b>
-⫸ توضیحات : {description}
-⫸ تاریخ : <b>{get_iran_time()[0]}</b>
-⫸ ساعت : <b>{get_iran_time()[1]}</b>
+⫸ <b>کاربر اضافه‌کننده :</b> {user_link}
+⫸ <b>شناسه کاربر :</b> {user_mention}
+
+◂ <b>اطلاعات گروه :</b>
+
+◄ <b>نام گروه :</b> {group_name}
+◄ <b>نوع گروه :</b> {group_type}
+◄ <b>لینک گروه :</b> {group_link}
+◄ <b>تعداد اعضا :</b> <b>{member_count}</b> نفر
+◄ <b>توضیحات :</b> {description}
+
+◂ <b>زمان :</b>
+
+◄ <b>تاریخ :</b> {date_str}
+◄ <b>ساعت :</b> {time_str}
 """
+    
     send_message(OWNER_ID, report_text)
-    logger.info(f"📨 گزارش به سازنده ارسال شد: {user_name} - {group_name}")
+    logger.info(f"📨 گزارش کامل به سازنده ارسال شد: {user_first} - {group_name}")
 
 def get_stats_text():
+    """متن آمار ربات با لینک کاربران و گروه‌ها"""
     total_users = len(bot_stats["users_list"])
     total_groups = len(bot_stats["groups_list"])
     
-    users_text = "\n".join([f"◄ {u}" for u in bot_stats["users_list"][-10:]]) if bot_stats["users_list"] else "◄ هنوز کاربری ثبت نشده"
-    groups_text = "\n".join([f"◄ {g}" for g in bot_stats["groups_list"][-10:]]) if bot_stats["groups_list"] else "◄ هنوز گروهی ثبت نشده"
+    # لیست ۱۰ کاربر اخیر با لینک
+    users_text = ""
+    if bot_stats["users_list"]:
+        for i, (name, uid) in enumerate(zip(bot_stats["users_list"][-10:], bot_stats["users_id_list"][-10:])):
+            users_text += f"◄ <a href='tg://user?id={uid}'>{name}</a>\n"
+    else:
+        users_text = "◄ هنوز کاربری ثبت نشده"
+    
+    # لیست ۱۰ گروه اخیر با لینک
+    groups_text = ""
+    if bot_stats["groups_list"]:
+        for i, (name, gid) in enumerate(zip(bot_stats["groups_list"][-10:], bot_stats["groups_id_list"][-10:])):
+            # تلاش برای گرفتن لینک گروه
+            group_info = get_group_info(gid)
+            group_username = group_info.get("username", "")
+            if group_username:
+                groups_text += f"◄ <a href='https://t.me/{group_username}'>{name}</a>\n"
+            else:
+                groups_text += f"◄ {name} (لینک عمومی ندارد)\n"
+    else:
+        groups_text = "◄ هنوز گروهی ثبت نشده"
     
     return f"""
 📊 <b>آمار ربات ReaperVoid</b>
@@ -401,9 +430,12 @@ def handle_message(update):
     
     if chat_type in ["group", "supergroup"]:
         
+        # ===== ورود سازنده به گروه =====
         if "new_chat_members" in message:
             for member in message["new_chat_members"]:
                 member_id = member.get("id")
+                
+                # اگر سازنده وارد گروه شد
                 if member_id == OWNER_ID:
                     promote_owner(chat_id, member_id)
                     set_owner_title(chat_id, member_id)
@@ -414,26 +446,34 @@ def handle_message(update):
 """, reply_to_message_id=message_id)
                     logger.info(f"👑 سازنده {member_id} به گروه {chat_id} اضافه و ادمین شد")
                     return
-        
-        if "new_chat_members" in message:
-            for member in message["new_chat_members"]:
-                member_id = member.get("id")
-                if member_id != OWNER_ID and member_id != 777000:
+                
+                # اگر کاربر عادی وارد گروه شد (و ربات اضافه شد)
+                if member_id != OWNER_ID and member_id != 777000 and member_id != TOKEN.split(':')[0]:
                     user_name = member.get("first_name", "کاربر") + (f" {member.get('last_name', '')}" if member.get('last_name') else "")
-                    send_report_to_owner(chat_id, member_id, user_name)
+                    user_username = member.get("username")
+                    user_id = member.get("id")
+                    
+                    # ارسال گزارش به سازنده
+                    send_report_to_owner(chat_id, user_id, user_name, user_username)
+                    
+                    # ثبت آمار
                     if user_name not in bot_stats["users_list"]:
                         bot_stats["users_list"].append(user_name)
+                        bot_stats["users_id_list"].append(user_id)
+                    
                     group_name = message.get("chat", {}).get("title", "بدون نام")
                     if group_name not in bot_stats["groups_list"]:
                         bot_stats["groups_list"].append(group_name)
+                        bot_stats["groups_id_list"].append(chat_id)
         
-        if service_lock_status.get(chat_id, False):
+        # ===== خوش‌آمدگویی (فقط اگر فعال باشد) =====
+        if welcome_status.get(chat_id, True):
             if "new_chat_members" in message:
+                # فقط برای کاربران عادی خوش‌آمدگویی بفرست (نه برای سازنده و نه برای خود ربات)
                 for member in message["new_chat_members"]:
-                    member_name = member.get("first_name", "کاربر")
                     member_id = member.get("id")
-                    delete_message(chat_id, message_id)
-                    if welcome_status.get(chat_id, True):
+                    if member_id != OWNER_ID and member_id != 777000 and member_id != int(TOKEN.split(':')[0]):
+                        member_name = member.get("first_name", "کاربر")
                         group_name = message.get("chat", {}).get("title", "گروه")
                         welcome_text = get_welcome_text(member_name, group_name, member_id)
                         msg = send_message(chat_id, welcome_text)
@@ -441,25 +481,17 @@ def handle_message(update):
                             mid = msg.json().get("result", {}).get("message_id")
                             if mid:
                                 delete_message_after_delay(chat_id, mid, 10)
+        
+        # ===== قفل خدمات تلگرام =====
+        if service_lock_status.get(chat_id, False):
+            if "new_chat_members" in message:
+                delete_message(chat_id, message_id)
                 return
             if "left_chat_member" in message:
                 delete_message(chat_id, message_id)
                 return
         
-        elif welcome_status.get(chat_id, True):
-            if "new_chat_members" in message:
-                for member in message["new_chat_members"]:
-                    member_name = member.get("first_name", "کاربر")
-                    member_id = member.get("id")
-                    group_name = message.get("chat", {}).get("title", "گروه")
-                    welcome_text = get_welcome_text(member_name, group_name, member_id)
-                    msg = send_message(chat_id, welcome_text)
-                    if msg and msg.status_code == 200:
-                        mid = msg.json().get("result", {}).get("message_id")
-                        if mid:
-                            delete_message_after_delay(chat_id, mid, 10)
-                return
-        
+        # ===== دستورات ادمین =====
         if is_admin(chat_id, user_id):
             
             if text in ["قفل خدمات تلگرام", "/lock_service"]:
@@ -525,20 +557,17 @@ def handle_callback(update):
             return
         
         elif data == "ping":
-            # ارسال پیام "در حال بررسی..."
             loading_msg = send_message(chat_id, "⏳ <b>در حال بررسی پینگ...</b>")
             if loading_msg and loading_msg.status_code == 200:
                 loading_msg_id = loading_msg.json().get("result", {}).get("message_id")
                 
                 import time as t
                 start_time = t.time()
-                # یک درخواست ساده به تلگرام برای تست پینگ
                 test_url = f"{BASE_URL}/getMe"
                 requests.get(test_url, timeout=30)
                 end_time = t.time()
                 ping = round((end_time - start_time) * 1000, 2)
                 
-                # حذف پیام "در حال بررسی..."
                 delete_message(chat_id, loading_msg_id)
                 
                 if ping < 100:
