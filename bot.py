@@ -39,6 +39,11 @@ def get_iran_time():
     time_str = f"{jalali.hour:02d}:{jalali.minute:02d}:{jalali.second:02d}"
     return date_str, time_str
 
+def get_iran_time_only():
+    now = datetime.now()
+    jalali = jdatetime.datetime.fromgregorian(datetime=now)
+    return f"{jalali.hour:02d}:{jalali.minute:02d}:{jalali.second:02d}"
+
 def send_message(chat_id, text, keyboard=None, reply_to_message_id=None):
     url = f"{BASE_URL}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
@@ -186,22 +191,72 @@ def get_group_info(chat_id):
         logger.error(f"خطا در دریافت اطلاعات گروه: {e}")
         return {}
 
+def get_user_info(user_id):
+    url = f"{BASE_URL}/getChat"
+    payload = {"chat_id": user_id}
+    try:
+        response = requests.get(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            return response.json().get("result", {})
+        return {}
+    except Exception as e:
+        logger.error(f"خطا در دریافت اطلاعات کاربر: {e}")
+        return {}
+
+def get_creator_info(chat_id):
+    """دریافت اطلاعات مالک/سازنده گروه"""
+    try:
+        # از طریق getChatMembersCount و getChatMember برای آیدی 0 (سازنده)
+        url = f"{BASE_URL}/getChatMember"
+        payload = {"chat_id": chat_id, "user_id": OWNER_ID}
+        response = requests.get(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            result = response.json().get("result", {})
+            if result.get("status") == "creator":
+                user = result.get("user", {})
+                return f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+        return "نامشخص"
+    except Exception as e:
+        logger.error(f"خطا در دریافت اطلاعات سازنده: {e}")
+        return "نامشخص"
+
+def get_creator_id(chat_id):
+    """دریافت آیدی مالک/سازنده گروه"""
+    try:
+        url = f"{BASE_URL}/getChatMember"
+        payload = {"chat_id": chat_id, "user_id": OWNER_ID}
+        response = requests.get(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            result = response.json().get("result", {})
+            if result.get("status") == "creator":
+                return result.get("user", {}).get("id")
+        return None
+    except Exception as e:
+        logger.error(f"خطا در دریافت آیدی سازنده: {e}")
+        return None
+
 def send_report_to_owner(chat_id, user_id, user_name, user_username=None):
     """ارسال گزارش کامل به سازنده"""
     group_info = get_group_info(chat_id)
     
     group_name = group_info.get("title", "بدون نام")
     group_username = group_info.get("username", "")
-    group_link = f"https://t.me/{group_username}" if group_username else "🔗 لینک عمومی ندارد"
+    group_link = f"https://t.me/{group_username}" if group_username else "🔗 لینک عمومی ندارد (گروه خصوصی)"
     member_count = group_info.get("members_count", "نامشخص")
     description = group_info.get("description", "📝 توضیحاتی ثبت نشده")
     group_type = group_info.get("type", "گروه عادی")
     
+    # اطلاعات کاربر اضافه‌کننده
     user_first = user_name
     user_link = f"<a href='tg://user?id={user_id}'>{user_first}</a>"
     user_mention = f"@{user_username}" if user_username else f"آیدی عددی: <code>{user_id}</code>"
     
-    date_str, time_str = get_iran_time()
+    # اطلاعات مالک گروه
+    creator_name = get_creator_info(chat_id)
+    creator_id = get_creator_id(chat_id)
+    creator_link = f"<a href='tg://user?id={creator_id}'>{creator_name}</a>" if creator_id else "نامشخص"
+    
+    time_str = get_iran_time_only()
     
     report_text = f"""
 📊 <b>گزارش اضافه شدن ربات به گروه</b>
@@ -215,12 +270,10 @@ def send_report_to_owner(chat_id, user_id, user_name, user_username=None):
 ◄ <b>نوع گروه :</b> {group_type}
 ◄ <b>لینک گروه :</b> {group_link}
 ◄ <b>تعداد اعضا :</b> <b>{member_count}</b> نفر
+◄ <b>مالک/سازنده گروه :</b> {creator_link}
 ◄ <b>توضیحات :</b> {description}
 
-◂ <b>زمان :</b>
-
-◄ <b>تاریخ :</b> {date_str}
-◄ <b>ساعت :</b> {time_str}
+◂ <b>ساعت :</b> {time_str}
 """
     
     send_message(OWNER_ID, report_text)
@@ -239,17 +292,16 @@ def get_stats_text():
     else:
         users_text = "◄ هنوز کاربری ثبت نشده"
     
-    # لیست ۱۰ گروه اخیر با لینک
+    # لیست ۱۰ گروه اخیر با لینک (اگه لینک عمومی نداره اسمش رو نشون بده)
     groups_text = ""
     if bot_stats["groups_list"]:
         for i, (name, gid) in enumerate(zip(bot_stats["groups_list"][-10:], bot_stats["groups_id_list"][-10:])):
-            # تلاش برای گرفتن لینک گروه
             group_info = get_group_info(gid)
             group_username = group_info.get("username", "")
             if group_username:
                 groups_text += f"◄ <a href='https://t.me/{group_username}'>{name}</a>\n"
             else:
-                groups_text += f"◄ {name} (لینک عمومی ندارد)\n"
+                groups_text += f"◄ {name} (🔒 خصوصی)\n"
     else:
         groups_text = "◄ هنوز گروهی ثبت نشده"
     
@@ -448,7 +500,7 @@ def handle_message(update):
                     return
                 
                 # اگر کاربر عادی وارد گروه شد (و ربات اضافه شد)
-                if member_id != OWNER_ID and member_id != 777000 and member_id != TOKEN.split(':')[0]:
+                if member_id != OWNER_ID and member_id != 777000 and member_id != int(TOKEN.split(':')[0]):
                     user_name = member.get("first_name", "کاربر") + (f" {member.get('last_name', '')}" if member.get('last_name') else "")
                     user_username = member.get("username")
                     user_id = member.get("id")
@@ -456,7 +508,8 @@ def handle_message(update):
                     # ارسال گزارش به سازنده
                     send_report_to_owner(chat_id, user_id, user_name, user_username)
                     
-                    # ثبت آمار
+                    # ثبت آمار - فقط اگر کاربر استارت کرده باشه
+                    # (در اینجا هر کاربر جدیدی که اضافه میشه به عنوان کاربر ثبت میشه)
                     if user_name not in bot_stats["users_list"]:
                         bot_stats["users_list"].append(user_name)
                         bot_stats["users_id_list"].append(user_id)
@@ -469,7 +522,6 @@ def handle_message(update):
         # ===== خوش‌آمدگویی (فقط اگر فعال باشد) =====
         if welcome_status.get(chat_id, True):
             if "new_chat_members" in message:
-                # فقط برای کاربران عادی خوش‌آمدگویی بفرست (نه برای سازنده و نه برای خود ربات)
                 for member in message["new_chat_members"]:
                     member_id = member.get("id")
                     if member_id != OWNER_ID and member_id != 777000 and member_id != int(TOKEN.split(':')[0]):
@@ -519,6 +571,11 @@ def handle_message(update):
     
     elif chat_type == "private":
         if text == "/start":
+            # ثبت آمار کاربر استارت کرده
+            if first_name not in bot_stats["users_list"]:
+                bot_stats["users_list"].append(first_name)
+                bot_stats["users_id_list"].append(user_id)
+            
             if user_id == OWNER_ID:
                 start_text = get_owner_start_text(user_id, first_name)
                 keyboard = get_owner_keyboard()
