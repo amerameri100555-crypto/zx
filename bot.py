@@ -209,21 +209,6 @@ def get_info_text():
 ✅ این ربات توسط <b>تیم حرفه‌ای ZX</b> توسعه یافته است.
 """
 
-def get_test_guide_text():
-    return """
-🗒 <b>راهنمای تست ربات ReaperVoid</b>
-
-💎 برای آشنایی با قدرت و برتری ربات ReaperVoid، امکان تست <b>۳ روزه</b> تمامی قابلیت‌ها به صورت <b>کاملاً رایگان</b> فراهم شده است.
-
-✅ <b>نصب ربات در ۳ مرحله ساده :</b>
-
-1️⃣ مرحله اول : اضافه کردن ربات به گروه
-
-2️⃣ مرحله دوم : ادمین کردن ربات با تمام دسترسی‌ها
-
-3️⃣ مرحله سوم : تنظیم قفل‌ها و حالت‌های مورد نظر
-"""
-
 def get_compare_text():
     return """
 🦾 <b>درباره ربات ReaperVoid</b>
@@ -240,33 +225,10 @@ def get_compare_text():
 🔰 <b>با ReaperVoid ، گروه خود را به سطح بعدی ببرید!</b>
 """
 
-def get_price_text():
-    return """
-💎 <b>نرخ ربات ReaperVoid :</b>
-
-┅┅┅┅┅┅┅┅┅┅┅┅┅
-
-💰 <b>ربات کاملاً رایگان است!</b>
-
-📌 <b>هزینه :</b> ۰ تومان
-
-✅ بدون هیچگونه هزینه
-✅ بدون تبلیغات
-✅ پشتیبانی کامل
-✅ آپدیت مادام‌العمر
-
-┈┅┅━━━━━✦━━━━━┅┅┈
-
-💳 برای اطلاعات بیشتر با پشتیبانی تماس بگیرید.
-🆔 @XMrAmer
-"""
-
 def get_main_keyboard():
     keyboard = [
         [{"text": "➕ اضافه کردن به گروه", "url": "https://t.me/ReaperVoidbot?startgroup=new"}],
         [{"text": "📓 اطلاعات بیشتر", "callback_data": "info"}, {"text": "🦾 درباره ربات", "callback_data": "compare"}],
-        [{"text": "🗒 راهنمای تست", "callback_data": "test"}],
-        [{"text": "💎 نرخ ربات", "callback_data": "price"}],
         [{"text": "👨‍💻 پشتیبانی", "url": "https://t.me/XMrAmer"}, {"text": "💬 گروه پشتیبانی", "url": "https://t.me/ReaperVoidGP"}],
         [{"text": "📢 کانال ربات", "url": "https://t.me/ReaperVoidTM"}]
     ]
@@ -381,14 +343,8 @@ def handle_callback(update):
     elif data == "info":
         edit_message(chat_id, message_id, get_info_text(), get_back_keyboard())
         answer_callback(callback_id)
-    elif data == "test":
-        edit_message(chat_id, message_id, get_test_guide_text(), get_back_keyboard())
-        answer_callback(callback_id)
     elif data == "compare":
         edit_message(chat_id, message_id, get_compare_text(), get_back_keyboard())
-        answer_callback(callback_id)
-    elif data == "price":
-        edit_message(chat_id, message_id, get_price_text(), get_back_keyboard())
         answer_callback(callback_id)
 
 def main():
