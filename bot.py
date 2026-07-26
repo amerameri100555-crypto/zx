@@ -4,9 +4,13 @@ import logging
 import json
 import jdatetime
 import base64
+import os
+import tempfile
+import subprocess
 from io import BytesIO
 from datetime import datetime, timedelta
 from PIL import Image
+from nudenet import NudeDetector
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
@@ -16,6 +20,14 @@ service_lock_status = {}
 welcome_status = {}
 porn_lock_status = {}
 porn_blocked_users = {}
+
+# ==================== بارگذاری NudeDetector ====================
+try:
+    nude_detector = NudeDetector()
+    logger.info("✅ NudeDetector با موفقیت بارگذاری شد!")
+except Exception as e:
+    logger.error(f"❌ خطا در بارگذاری NudeDetector: {e}")
+    nude_detector = None
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -40,7 +52,7 @@ def send_message(chat_id, text, keyboard=None, reply_to_message_id=None):
     if reply_to_message_id:
         payload["reply_to_message_id"] = reply_to_message_id
     try:
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, timeout=60)
         return response
     except Exception as e:
         logger.error(f"خطا: {e}")
@@ -89,7 +101,6 @@ def get_chat_member(chat_id, user_id):
         return {}
 
 def restrict_user(chat_id, user_id, until_date):
-    """محدود کردن کامل ارسال رسانه"""
     url = f"{BASE_URL}/restrictChatMember"
     permissions = {
         "can_send_messages": True,
@@ -145,66 +156,92 @@ def download_file(file_id):
                     return file_response.content
         return None
     except Exception as e:
-        logger.error(f"خطا: {e}")
+        logger.error(f"خطا در دانلود: {e}")
         return None
 
-def check_nsfw_with_nsfwapi(image_bytes):
-    """بررسی با NSFW API رایگان"""
+def extract_frames(video_bytes, frame_interval=2):
+    """استخراج فریم از ویدیو و گیف"""
+    frames = []
     try:
-        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
-        url = "https://nsfwapi.xyz/api/v1/detect"
-        payload = {"image": image_base64}
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        if response.status_code == 200:
-            result = response.json()
-            is_nsfw = result.get("result", {}).get("nsfw", False)
-            confidence = result.get("result", {}).get("confidence", 0)
-            logger.info(f"🔍 NSFW API: {is_nsfw} (اطمینان: {confidence})")
-            return is_nsfw and confidence > 0.4
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_video:
+            temp_video.write(video_bytes)
+            temp_video_path = temp_video.name
+        
+        # استخراج فریم با ffmpeg
+        output_pattern = tempfile.mktemp(suffix='_frame_%d.jpg')
+        cmd = [
+            'ffmpeg', '-i', temp_video_path,
+            '-vf', f'fps=1/{frame_interval}',
+            '-frames:v', '10',
+            '-q:v', '2',
+            output_pattern
+        ]
+        
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+        
+        # خواندن فریم‌های استخراج شده
+        for i in range(1, 11):
+            frame_path = output_pattern.replace('%d', str(i))
+            if os.path.exists(frame_path):
+                with open(frame_path, 'rb') as f:
+                    frames.append(f.read())
+                os.remove(frame_path)
+        
+        os.remove(temp_video_path)
+        return frames
+        
+    except Exception as e:
+        logger.error(f"خطا در استخراج فریم: {e}")
+        return []
+
+def check_nsfw_with_nudenet(image_bytes):
+    """بررسی با NudeNet"""
+    if nude_detector is None:
+        return False
+    
+    try:
+        image = Image.open(BytesIO(image_bytes))
+        result = nude_detector.detect(image)
+        
+        for item in result:
+            label = item.get('label', '').lower()
+            score = item.get('score', 0)
+            if score > 0.5 and label in ['FEMALE_BREAST_EXPOSED', 'MALE_BREAST_EXPOSED',
+                                          'FEMALE_GENITALIA_EXPOSED', 'MALE_GENITALIA_EXPOSED',
+                                          'BUTTOCKS_EXPOSED', 'ANUS_EXPOSED']:
+                logger.info(f"🔞 NudeNet: {label} - {score}")
+                return True
         return False
     except Exception as e:
-        logger.error(f"خطا در NSFW API: {e}")
+        logger.error(f"خطا در NudeNet: {e}")
         return False
 
-def check_nsfw_with_deepai(image_bytes):
-    """بررسی با DeepAI API رایگان"""
-    try:
-        url = "https://api.deepai.org/api/nsfw-detector"
-        files = {'image': ('image.jpg', image_bytes, 'image/jpeg')}
-        response = requests.post(url, files=files, timeout=30)
-        if response.status_code == 200:
-            result = response.json()
-            nsfw_score = result.get("output", {}).get("nsfw_score", 0)
-            logger.info(f"🔍 DeepAI: {nsfw_score}")
-            return nsfw_score > 0.7
-        return False
-    except Exception as e:
-        logger.error(f"خطا در DeepAI: {e}")
-        return False
-
-def is_nsfw_image(image_bytes):
-    """تشخیص پورن در تصویر با دو API مختلف"""
-    if check_nsfw_with_nsfwapi(image_bytes):
-        return True
-    if check_nsfw_with_deepai(image_bytes):
-        return True
-    return False
-
-def is_nsfw_media(file_id, file_type):
-    """تشخیص پورن برای انواع رسانه"""
+def check_nsfw_media(file_id, file_type):
+    """تشخیص پورن با NudeNet برای همه نوع رسانه"""
     if not file_id:
         return False
     
-    # فقط عکس و استیکر رو با API بررسی کن
-    if file_type in ["photo", "sticker"]:
-        file_bytes = download_file(file_id)
-        if not file_bytes:
-            return False
-        return is_nsfw_image(file_bytes)
+    file_bytes = download_file(file_id)
+    if not file_bytes:
+        return False
     
-    # ویدیو، گیف، ویدیو نوت، فایل: فعلاً پشتیبانی نمیشه
-    # ولی پیام رو حذف میکنیم چون رسانه‌ای فرستاده شده
+    # عکس و استیکر
+    if file_type in ["photo", "sticker"]:
+        return check_nsfw_with_nudenet(file_bytes)
+    
+    # ویدیو، گیف، ویدیو نوت
+    elif file_type in ["video", "animation", "video_note"]:
+        frames = extract_frames(file_bytes, 2)
+        for frame in frames:
+            if check_nsfw_with_nudenet(frame):
+                return True
+        return False
+    
+    # فایل
+    elif file_type == "document":
+        # فایل‌ها رو فعلاً بررسی نمیکنیم
+        return False
+    
     return False
 
 def is_user_blocked(chat_id, user_id):
@@ -224,6 +261,8 @@ def delete_message_after_delay(chat_id, message_id, delay=10):
         delete_message(chat_id, message_id)
     import threading
     threading.Thread(target=delete_later, daemon=True).start()
+
+# ==================== متن‌ها ====================
 
 def get_start_text(user_id, first_name):
     date_str, time_str = get_iran_time()
@@ -446,88 +485,58 @@ def handle_message(update):
                 file_id = message["photo"][-1]["file_id"]
                 file_type = "photo"
                 has_media = True
-                is_nsfw = is_nsfw_media(file_id, file_type)
+                is_nsfw = check_nsfw_media(file_id, file_type)
             
             # بررسی استیکر
             elif "sticker" in message:
                 file_id = message["sticker"]["file_id"]
                 file_type = "sticker"
                 has_media = True
-                is_nsfw = is_nsfw_media(file_id, file_type)
+                is_nsfw = check_nsfw_media(file_id, file_type)
             
             # بررسی ویدیو
             elif "video" in message:
                 file_id = message["video"]["file_id"]
                 file_type = "video"
                 has_media = True
-                # ویدیو رو با API بررسی کن (اگر جواب نداد، حذفش کن)
-                is_nsfw = is_nsfw_media(file_id, file_type)
-                if not is_nsfw:
-                    # اگه API تشخیص نداد، باز هم حذفش کن (برای امنیت بیشتر)
-                    is_nsfw = True
+                is_nsfw = check_nsfw_media(file_id, file_type)
             
             # بررسی گیف
             elif "animation" in message:
                 file_id = message["animation"]["file_id"]
                 file_type = "animation"
                 has_media = True
-                is_nsfw = is_nsfw_media(file_id, file_type)
-                if not is_nsfw:
-                    is_nsfw = True
+                is_nsfw = check_nsfw_media(file_id, file_type)
             
             # بررسی ویدیو نوت
             elif "video_note" in message:
                 file_id = message["video_note"]["file_id"]
                 file_type = "video_note"
                 has_media = True
-                is_nsfw = is_nsfw_media(file_id, file_type)
-                if not is_nsfw:
-                    is_nsfw = True
+                is_nsfw = check_nsfw_media(file_id, file_type)
             
             # بررسی فایل
             elif "document" in message:
                 file_id = message["document"]["file_id"]
                 file_type = "document"
                 has_media = True
-                is_nsfw = is_nsfw_media(file_id, file_type)
-                if not is_nsfw:
-                    is_nsfw = True
+                is_nsfw = check_nsfw_media(file_id, file_type)
             
-            # اگر رسانه‌ای فرستاده شده
-            if has_media:
-                # برای عکس و استیکر فقط در صورت NSFW بودن حذف کن
-                if file_type in ["photo", "sticker"] and is_nsfw:
-                    delete_message(chat_id, message_id)
-                    until = int((datetime.now() + timedelta(days=7)).timestamp())
-                    restrict_user(chat_id, user_id, until)
-                    if chat_id not in porn_blocked_users:
-                        porn_blocked_users[chat_id] = {}
-                    porn_blocked_users[chat_id][user_id] = datetime.now() + timedelta(days=7)
-                    block_text = get_block_message(first_name, user_id)
-                    msg = send_message(chat_id, block_text)
-                    if msg and msg.status_code == 200:
-                        mid = msg.json().get("result", {}).get("message_id")
-                        if mid:
-                            delete_message_after_delay(chat_id, mid, 10)
-                    logger.info(f"🔞 پورن از {first_name} حذف و محدود شد")
-                    return
-                
-                # برای ویدیو، گیف، ویدیو نوت، فایل (همیشه حذف کن چون نمیتونیم تشخیص بدیم)
-                elif file_type in ["video", "animation", "video_note", "document"]:
-                    delete_message(chat_id, message_id)
-                    until = int((datetime.now() + timedelta(days=7)).timestamp())
-                    restrict_user(chat_id, user_id, until)
-                    if chat_id not in porn_blocked_users:
-                        porn_blocked_users[chat_id] = {}
-                    porn_blocked_users[chat_id][user_id] = datetime.now() + timedelta(days=7)
-                    block_text = get_block_message(first_name, user_id)
-                    msg = send_message(chat_id, block_text)
-                    if msg and msg.status_code == 200:
-                        mid = msg.json().get("result", {}).get("message_id")
-                        if mid:
-                            delete_message_after_delay(chat_id, mid, 10)
-                    logger.info(f"🔞 رسانه از {first_name} حذف و محدود شد (تشخیص نشد)")
-                    return
+            if has_media and is_nsfw:
+                delete_message(chat_id, message_id)
+                until = int((datetime.now() + timedelta(days=7)).timestamp())
+                restrict_user(chat_id, user_id, until)
+                if chat_id not in porn_blocked_users:
+                    porn_blocked_users[chat_id] = {}
+                porn_blocked_users[chat_id][user_id] = datetime.now() + timedelta(days=7)
+                block_text = get_block_message(first_name, user_id)
+                msg = send_message(chat_id, block_text)
+                if msg and msg.status_code == 200:
+                    mid = msg.json().get("result", {}).get("message_id")
+                    if mid:
+                        delete_message_after_delay(chat_id, mid, 10)
+                logger.info(f"🔞 رسانه پورن از {first_name} حذف شد")
+                return
         
         # ===== خدمات تلگرام =====
         if service_lock_status.get(chat_id, False):

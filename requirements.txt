@@ -1,3 +1,4 @@
 requests==2.31.0
 jdatetime==4.1.0
+nudenet==3.4.2
 pillow==10.4.0
