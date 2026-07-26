@@ -206,7 +206,6 @@ def get_user_info(user_id):
 def get_creator_info(chat_id):
     """دریافت اطلاعات مالک/سازنده گروه"""
     try:
-        # از طریق getChatMembersCount و getChatMember برای آیدی 0 (سازنده)
         url = f"{BASE_URL}/getChatMember"
         payload = {"chat_id": chat_id, "user_id": OWNER_ID}
         response = requests.get(url, json=payload, timeout=30)
@@ -246,12 +245,10 @@ def send_report_to_owner(chat_id, user_id, user_name, user_username=None):
     description = group_info.get("description", "📝 توضیحاتی ثبت نشده")
     group_type = group_info.get("type", "گروه عادی")
     
-    # اطلاعات کاربر اضافه‌کننده
     user_first = user_name
     user_link = f"<a href='tg://user?id={user_id}'>{user_first}</a>"
     user_mention = f"@{user_username}" if user_username else f"آیدی عددی: <code>{user_id}</code>"
     
-    # اطلاعات مالک گروه
     creator_name = get_creator_info(chat_id)
     creator_id = get_creator_id(chat_id)
     creator_link = f"<a href='tg://user?id={creator_id}'>{creator_name}</a>" if creator_id else "نامشخص"
@@ -284,18 +281,16 @@ def get_stats_text():
     total_users = len(bot_stats["users_list"])
     total_groups = len(bot_stats["groups_list"])
     
-    # لیست ۱۰ کاربر اخیر با لینک
     users_text = ""
     if bot_stats["users_list"]:
-        for i, (name, uid) in enumerate(zip(bot_stats["users_list"][-10:], bot_stats["users_id_list"][-10:])):
+        for name, uid in list(zip(bot_stats["users_list"], bot_stats["users_id_list"]))[-10:]:
             users_text += f"◄ <a href='tg://user?id={uid}'>{name}</a>\n"
     else:
         users_text = "◄ هنوز کاربری ثبت نشده"
     
-    # لیست ۱۰ گروه اخیر با لینک (اگه لینک عمومی نداره اسمش رو نشون بده)
     groups_text = ""
     if bot_stats["groups_list"]:
-        for i, (name, gid) in enumerate(zip(bot_stats["groups_list"][-10:], bot_stats["groups_id_list"][-10:])):
+        for name, gid in list(zip(bot_stats["groups_list"], bot_stats["groups_id_list"]))[-10:]:
             group_info = get_group_info(gid)
             group_username = group_info.get("username", "")
             if group_username:
@@ -382,7 +377,7 @@ def get_start_text(user_id, first_name):
 ◄ <b>💎 کیفیت، حرف اول را می‌زند</b>
 ◄ <b>⚡ سرعت، مزیت رقابتی ماست</b>
 
-❓ چرا به ما اعتماد کنیم؟
+❓ چرا به ما اعتماد کنیم？
 
 ◂ <b>⚡ پردازش فوق‌سریع</b>
 ◂ <b>📞 پاسخگویی آنی</b>
@@ -497,6 +492,11 @@ def handle_message(update):
 ◄ شما با موفقیت ادمین شدید و لقب <b>⋆ سازنده ربات ⋆</b> برای شما تنظیم شد !
 """, reply_to_message_id=message_id)
                     logger.info(f"👑 سازنده {member_id} به گروه {chat_id} اضافه و ادمین شد")
+                    # ثبت گروه
+                    group_name = message.get("chat", {}).get("title", "بدون نام")
+                    if group_name not in bot_stats["groups_list"]:
+                        bot_stats["groups_list"].append(group_name)
+                        bot_stats["groups_id_list"].append(chat_id)
                     return
                 
                 # اگر کاربر عادی وارد گروه شد (و ربات اضافه شد)
@@ -508,12 +508,12 @@ def handle_message(update):
                     # ارسال گزارش به سازنده
                     send_report_to_owner(chat_id, user_id, user_name, user_username)
                     
-                    # ثبت آمار - فقط اگر کاربر استارت کرده باشه
-                    # (در اینجا هر کاربر جدیدی که اضافه میشه به عنوان کاربر ثبت میشه)
+                    # ثبت آمار کاربر
                     if user_name not in bot_stats["users_list"]:
                         bot_stats["users_list"].append(user_name)
                         bot_stats["users_id_list"].append(user_id)
                     
+                    # ثبت گروه
                     group_name = message.get("chat", {}).get("title", "بدون نام")
                     if group_name not in bot_stats["groups_list"]:
                         bot_stats["groups_list"].append(group_name)
@@ -541,6 +541,41 @@ def handle_message(update):
                 return
             if "left_chat_member" in message:
                 delete_message(chat_id, message_id)
+                return
+        
+        # ===== دستورات =====
+        
+        # ===== پاکسازی گروه (فقط ادمین‌ها، مالک، برنامه نویس) =====
+        if text == "پاکسازی گروه":
+            if is_admin(chat_id, user_id) or user_id == OWNER_ID:
+                # ارسال پیام شروع پاکسازی
+                msg = send_message(chat_id, "<b>⫸ پاکسازی گروه شروع شد لطفا صبر نمایید !</b>")
+                
+                if msg and msg.status_code == 200:
+                    msg_id = msg.json().get("result", {}).get("message_id")
+                    
+                    # حذف همه پیام‌های گروه
+                    try:
+                        # دریافت تاریخ 1 روز قبل
+                        delete_time = int((datetime.now() - timedelta(days=1)).timestamp())
+                        
+                        url = f"{BASE_URL}/deleteChatMessages"
+                        payload = {
+                            "chat_id": chat_id,
+                            "delete_before": delete_time
+                        }
+                        response = requests.post(url, json=payload, timeout=60)
+                        
+                        if response.status_code == 200:
+                            # ویرایش پیام به موفقیت
+                            edit_message(chat_id, msg_id, "<b>◄ پاکسازی گروه با موفقیت انجام شد !</b>")
+                            logger.info(f"🧹 پاکسازی گروه {chat_id} توسط {first_name} انجام شد")
+                        else:
+                            edit_message(chat_id, msg_id, "<b>❌ خطا در پاکسازی گروه !</b>")
+                            logger.error(f"❌ خطا در پاکسازی گروه: {response.text}")
+                    except Exception as e:
+                        edit_message(chat_id, msg_id, "<b>❌ خطا در پاکسازی گروه !</b>")
+                        logger.error(f"❌ خطا در پاکسازی گروه: {e}")
                 return
         
         # ===== دستورات ادمین =====
