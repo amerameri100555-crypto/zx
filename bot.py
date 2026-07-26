@@ -433,7 +433,7 @@ def get_compare_text():
 
 def get_main_keyboard():
     keyboard = [
-        [{"text": "➕ اضافه کردن به گروه", "url": "https://t.me/ReaperVoidbot?startgroup=new"}],
+        [{"text": "➕ اضافه کردن بهグループ", "url": "https://t.me/ReaperVoidbot?startgroup=new"}],
         [{"text": "📓 اطلاعات بیشتر", "callback_data": "info"}, {"text": "🦾 درباره ربات", "callback_data": "compare"}],
         [{"text": "👨‍💻 پشتیبانی", "url": "https://t.me/XMrAmer"}, {"text": "💬 گروه پشتیبانی", "url": "https://t.me/ReaperVoidGP"}],
         [{"text": "📢 کانال ربات", "url": "https://t.me/ReaperVoidTM"}]
@@ -497,7 +497,7 @@ def handle_message(update):
                         bot_stats["groups_list"].append(group_name)
                         bot_stats["groups_id_list"].append(chat_id)
         
-        # ===== خوش‌آمدگویی (فقط اگر فعال باشد) =====
+        # ===== خوش‌آمدگویی =====
         if welcome_status.get(chat_id, True):
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
@@ -521,9 +521,7 @@ def handle_message(update):
                 delete_message(chat_id, message_id)
                 return
         
-        # ===== دستورات =====
-        
-        # ===== پاکسازی گروه (ادمین‌ها، مالک، برنامه نویس) =====
+        # ===== پاکسازی کامل گروه =====
         if text == "پاکسازی گروه":
             if is_admin(chat_id, user_id) or user_id == OWNER_ID:
                 msg = send_message(chat_id, "<b>⫸ پاکسازی گروه شروع شد لطفا صبر نمایید !</b>")
@@ -533,13 +531,21 @@ def handle_message(update):
                     deleted_count = 0
                     
                     try:
-                        url = f"{BASE_URL}/getUpdates"
-                        params = {"chat_id": chat_id, "limit": 100}
-                        response = requests.get(url, params=params, timeout=30)
-                        
-                        if response.status_code == 200:
-                            updates = response.json().get("result", [])
-                            if updates:
+                        offset = None
+                        while True:
+                            url = f"{BASE_URL}/getUpdates"
+                            params = {"chat_id": chat_id, "limit": 100}
+                            if offset:
+                                params["offset"] = offset
+                            
+                            response = requests.get(url, params=params, timeout=30)
+                            
+                            if response.status_code == 200:
+                                updates = response.json().get("result", [])
+                                
+                                if not updates:
+                                    break
+                                
                                 for update in updates:
                                     if "message" in update:
                                         mid = update["message"]["message_id"]
@@ -547,14 +553,20 @@ def handle_message(update):
                                         deleted_count += 1
                                         time.sleep(0.05)
                                 
-                                edit_message(chat_id, msg_id, f"<b>◄ پاکسازی گروه با موفقیت انجام شد !</b>\n🗑 تعداد پیام‌های حذف شده: {deleted_count}")
+                                if updates:
+                                    offset = updates[-1]["update_id"] + 1
+                                else:
+                                    break
                             else:
-                                edit_message(chat_id, msg_id, "<b>◄ هیچ پیامی برای پاکسازی وجود نداشت !</b>")
-                        else:
-                            edit_message(chat_id, msg_id, "<b>❌ خطا در پاکسازی گروه !</b>")
-                            logger.error(f"❌ خطا در پاکسازی: {response.text}")
+                                logger.error(f"❌ خطا در دریافت پیام‌ها: {response.text}")
+                                break
                         
-                        logger.info(f"🧹 پاکسازی گروه {chat_id} توسط {first_name} - {deleted_count} پیام")
+                        if deleted_count > 0:
+                            edit_message(chat_id, msg_id, f"<b>◄ پاکسازی گروه با موفقیت انجام شد !</b>\n🗑 تعداد پیام‌های حذف شده: {deleted_count}")
+                        else:
+                            edit_message(chat_id, msg_id, "<b>◄ هیچ پیامی برای پاکسازی وجود نداشت !</b>")
+                        
+                        logger.info(f"🧹 پاکسازی کامل گروه {chat_id} توسط {first_name} - {deleted_count} پیام")
                         
                     except Exception as e:
                         edit_message(chat_id, msg_id, "<b>❌ خطا در پاکسازی گروه !</b>")
