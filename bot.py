@@ -118,49 +118,45 @@ def delete_message_after_delay(chat_id, message_id, delay=10):
 # ==================== متن‌ها ====================
 
 def get_start_text(user_id, first_name):
-    date_str, time_str = get_iran_time()
     return f"""
 🌟 <b>سلام بر تو <a href="tg://user?id={user_id}">{first_name}</a> عزیز</b> 🌹
 
 💬 من رباتی هوشمند و قدرتمند برای مدیریت حرفه‌ای گروه‌های تلگرامی هستم!
 
-📆 تاریخ : <b>{date_str}</b>
-⏰ ساعت : <b>{time_str}</b>
+🔥 برتری‌های انحصاری من :
 
-🔥 برتری‌های من :
-
-◄ <b>پاکسازی گروه در کسری از ثانیه</b>
-◄ <b>سیستم ضدترک گروه</b>
-◄ <b>قفل‌های متنوع و حرفه‌ای</b>
-◄ <b>خوش‌آمدگویی هوشمند</b>
-◄ <b>گزارش‌گیری دقیق و روزانه</b>
-◄ <b>بدون تبلیغات مزاحم</b>
+◄ <b>⚡ پاکسازی گروه در کسری از ثانیه</b>
+◄ <b>🛡 سیستم ضدترک گروه</b>
+◄ <b>🔒 قفل‌های متنوع و حرفه‌ای</b>
+◄ <b>👋 خوش‌آمدگویی هوشمند</b>
+◄ <b>📊 گزارش‌گیری دقیق و روزانه</b>
+◄ <b>🚫 بدون تبلیغات مزاحم</b>
 
 ✨ ویژگی‌های منحصربفرد :
 
-◂ <b>۹۹.۹٪ آپتایم</b>
-◂ <b>هاست قدرتمند و اختصاصی</b>
-◂ <b>سرعت بی‌نظیر در گروه‌های سنگین</b>
-◂ <b>پایداری در برابر حملات</b>
-◂ <b>قفل‌های متنوع و حرفه‌ای</b>
-◂ <b>احوالپرسی اتوماتیک و هوشمند</b>
-◂ <b>قابلیت اضافه کردن اجباری</b>
-◂ <b>گزارش‌گیری دقیق و روزانه</b>
-◂ <b>دوره تست برای اطمینان</b>
-◂ <b>کاملاً بدون تبلیغات مزاحم</b>
+◂ <b>⏫ ۹۹.۹٪ آپتایم</b>
+◂ <b>🖥 هاست قدرتمند و اختصاصی</b>
+◂ <b>🚀 سرعت بی‌نظیر در گروه‌های سنگین</b>
+◂ <b>🛡 پایداری در برابر حملات</b>
+◂ <b>🔐 قفل‌های متنوع و حرفه‌ای</b>
+◂ <b>🤖 احوالپرسی اتوماتیک و هوشمند</b>
+◂ <b>➕ قابلیت اضافه کردن اجباری</b>
+◂ <b>📋 گزارش‌گیری دقیق و روزانه</b>
+◂ <b>⏳ دوره تست برای اطمینان</b>
+◂ <b>🚫 کاملاً بدون تبلیغات مزاحم</b>
 
 ⚡ ما شبیه هیچکس نیستیم!
 
-◄ <b>امنیت گروه، اولویت اول ماست</b>
-◄ <b>کیفیت، حرف اول را می‌زند</b>
-◄ <b>سرعت، مزیت رقابتی ماست</b>
+◄ <b>🛡 امنیت گروه، اولویت اول ماست</b>
+◄ <b>💎 کیفیت، حرف اول را می‌زند</b>
+◄ <b>⚡ سرعت، مزیت رقابتی ماست</b>
 
 ❓ چرا به ما اعتماد کنیم؟
 
-◂ <b>پردازش فوق‌سریع</b>
-◂ <b>پاسخگویی آنی</b>
-◂ <b>آپدیت‌های مستمر</b>
-◂ <b>پشتیبانی حرفه‌ای</b>
+◂ <b>⚡ پردازش فوق‌سریع</b>
+◂ <b>📞 پاسخگویی آنی</b>
+◂ <b>🔄 آپدیت‌های مستمر</b>
+◂ <b>👨‍💻 پشتیبانی حرفه‌ای</b>
 
 💻 <b>ساخته شده توسط تیم ZX</b>
 
@@ -238,6 +234,8 @@ def get_back_keyboard():
     keyboard = [[{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back"}]]
     return json.dumps({"inline_keyboard": keyboard})
 
+# ==================== پردازش ====================
+
 def handle_message(update):
     message = update.get("message", {})
     chat_id = message.get("chat", {}).get("id")
@@ -289,18 +287,26 @@ def handle_message(update):
         
         # ===== دستورات ادمین =====
         if is_admin(chat_id, user_id):
+            
+            # قفل خدمات تلگرام
             if text in ["قفل خدمات تلگرام", "/lock_service"]:
                 service_lock_status[chat_id] = True
                 send_message(chat_id, "<b>◂ قفل خدمات تلگرام فعال شد !</b>", reply_to_message_id=message_id)
                 return
+            
+            # باز کردن خدمات تلگرام
             if text in ["باز کردن خدمات تلگرام", "/unlock_service"]:
                 service_lock_status[chat_id] = False
                 send_message(chat_id, "<b>◂ قفل خدمات تلگرام غیر فعال شد !</b>", reply_to_message_id=message_id)
                 return
+            
+            # خوش آمدگویی فعال
             if text in ["خوش آمدگویی فعال", "/enable_welcome"]:
                 welcome_status[chat_id] = True
                 send_message(chat_id, "<b>◄ خوش آمدگویی فعال شد !</b>", reply_to_message_id=message_id)
                 return
+            
+            # خوش آمدگویی غیرفعال
             if text in ["خوش آمدگویی غیرفعال", "/disable_welcome"]:
                 welcome_status[chat_id] = False
                 send_message(chat_id, "<b>◄ خوش آمدگویی غیرفعال شد !</b>", reply_to_message_id=message_id)
@@ -340,9 +346,11 @@ def handle_callback(update):
         keyboard = get_main_keyboard()
         edit_message(chat_id, message_id, text, keyboard)
         answer_callback(callback_id)
+    
     elif data == "info":
         edit_message(chat_id, message_id, get_info_text(), get_back_keyboard())
         answer_callback(callback_id)
+    
     elif data == "compare":
         edit_message(chat_id, message_id, get_compare_text(), get_back_keyboard())
         answer_callback(callback_id)
