@@ -433,7 +433,7 @@ def get_compare_text():
 
 def get_main_keyboard():
     keyboard = [
-        [{"text": "➕ اضافه کردن بهグループ", "url": "https://t.me/ReaperVoidbot?startgroup=new"}],
+        [{"text": "➕ اضافه کردن به گروه", "url": "https://t.me/ReaperVoidbot?startgroup=new"}],
         [{"text": "📓 اطلاعات بیشتر", "callback_data": "info"}, {"text": "🦾 درباره ربات", "callback_data": "compare"}],
         [{"text": "👨‍💻 پشتیبانی", "url": "https://t.me/XMrAmer"}, {"text": "💬 گروه پشتیبانی", "url": "https://t.me/ReaperVoidGP"}],
         [{"text": "📢 کانال ربات", "url": "https://t.me/ReaperVoidTM"}]
@@ -443,6 +443,18 @@ def get_main_keyboard():
 def get_back_keyboard():
     keyboard = [[{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back"}]]
     return json.dumps({"inline_keyboard": keyboard})
+
+def get_panel_keyboard():
+    keyboard = [
+        [{"text": "🔒 قفل‌ها", "callback_data": "locks"}],
+        [{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back"}]
+    ]
+    return json.dumps({"inline_keyboard": keyboard})
+
+def get_panel_text():
+    return """
+⫸ <b>لطفا بخش مورد نظر خود را انتخاب کنید :</b>
+"""
 
 # ==================== پردازش ====================
 
@@ -521,31 +533,34 @@ def handle_message(update):
                 delete_message(chat_id, message_id)
                 return
         
+        # ===== دستورات =====
+        
+        # ===== پنل مدیریت =====
+        if text == "پنل":
+            if is_admin(chat_id, user_id) or user_id == OWNER_ID:
+                panel_text = get_panel_text()
+                keyboard = get_panel_keyboard()
+                send_message(chat_id, panel_text, keyboard, reply_to_message_id=message_id)
+            return
+        
         # ===== پاکسازی کامل گروه =====
         if text == "پاکسازی گروه":
             if is_admin(chat_id, user_id) or user_id == OWNER_ID:
-                msg = send_message(chat_id, "<b>⫸ پاکسازی گروه شروع شد لطفا صبر نمایید !</b>")
+                msg = send_message(chat_id, "<b>⫸ پاکسازی گروه شروع شد لطفا صبر نمایید !</b>", reply_to_message_id=message_id)
                 
                 if msg and msg.status_code == 200:
                     msg_id = msg.json().get("result", {}).get("message_id")
                     deleted_count = 0
                     
                     try:
-                        offset = None
-                        while True:
-                            url = f"{BASE_URL}/getUpdates"
-                            params = {"chat_id": chat_id, "limit": 100}
-                            if offset:
-                                params["offset"] = offset
-                            
-                            response = requests.get(url, params=params, timeout=30)
-                            
-                            if response.status_code == 200:
-                                updates = response.json().get("result", [])
-                                
-                                if not updates:
-                                    break
-                                
+                        # روش حذف با دریافت تمام پیام‌ها
+                        url = f"{BASE_URL}/getUpdates"
+                        params = {"chat_id": chat_id, "limit": 100}
+                        response = requests.get(url, params=params, timeout=30)
+                        
+                        if response.status_code == 200:
+                            updates = response.json().get("result", [])
+                            if updates:
                                 for update in updates:
                                     if "message" in update:
                                         mid = update["message"]["message_id"]
@@ -553,18 +568,29 @@ def handle_message(update):
                                         deleted_count += 1
                                         time.sleep(0.05)
                                 
-                                if updates:
-                                    offset = updates[-1]["update_id"] + 1
-                                else:
-                                    break
+                                # ادامه برای پیام‌های بیشتر
+                                while True:
+                                    params["offset"] = updates[-1]["update_id"] + 1
+                                    response = requests.get(url, params=params, timeout=30)
+                                    if response.status_code == 200:
+                                        updates = response.json().get("result", [])
+                                        if not updates:
+                                            break
+                                        for update in updates:
+                                            if "message" in update:
+                                                mid = update["message"]["message_id"]
+                                                delete_message(chat_id, mid)
+                                                deleted_count += 1
+                                                time.sleep(0.05)
+                                    else:
+                                        break
+                                
+                                edit_message(chat_id, msg_id, f"<b>◄ پاکسازی گروه با موفقیت انجام شد !</b>\n🗑 تعداد پیام‌های حذف شده: {deleted_count}")
                             else:
-                                logger.error(f"❌ خطا در دریافت پیام‌ها: {response.text}")
-                                break
-                        
-                        if deleted_count > 0:
-                            edit_message(chat_id, msg_id, f"<b>◄ پاکسازی گروه با موفقیت انجام شد !</b>\n🗑 تعداد پیام‌های حذف شده: {deleted_count}")
+                                edit_message(chat_id, msg_id, "<b>◄ هیچ پیامی برای پاکسازی وجود نداشت !</b>")
                         else:
-                            edit_message(chat_id, msg_id, "<b>◄ هیچ پیامی برای پاکسازی وجود نداشت !</b>")
+                            edit_message(chat_id, msg_id, "<b>❌ خطا در پاکسازی گروه !</b>")
+                            logger.error(f"❌ خطا در پاکسازی: {response.text}")
                         
                         logger.info(f"🧹 پاکسازی کامل گروه {chat_id} توسط {first_name} - {deleted_count} پیام")
                         
@@ -634,6 +660,26 @@ def handle_callback(update):
     
     logger.info(f"🔘 کال‌بک: {data}")
     
+    # ===== پنل مدیریت =====
+    if data == "locks":
+        locks_text = """
+🔒 <b>قفل‌های ربات</b>
+
+◄ <b>قفل خدمات تلگرام</b> : {} 
+◄ <b>خوش آمدگویی</b> : {}
+
+◄ برای تغییر هر بخش از دستورات زیر استفاده کنید :
+
+• قفل خدمات تلگرام
+• باز کردن خدمات تلگرام
+• خوش آمدگویی فعال
+• خوش آمدگویی غیرفعال
+""".format("🟢 فعال" if service_lock_status.get(chat_id, False) else "🔴 غیرفعال", "🟢 فعال" if welcome_status.get(chat_id, True) else "🔴 غیرفعال")
+        
+        edit_message(chat_id, message_id, locks_text, get_panel_keyboard())
+        answer_callback(callback_id)
+        return
+    
     if user_id == OWNER_ID:
         if data == "stats":
             stats_text = get_stats_text()
@@ -686,11 +732,12 @@ def handle_callback(update):
             return
     
     if data == "back":
-        user = callback.get("from", {})
-        user_id = user.get("id", 0)
-        first_name = user.get("first_name", "کاربر")
-        text = get_start_text(user_id, first_name)
-        keyboard = get_main_keyboard()
+        if user_id == OWNER_ID:
+            text = get_owner_start_text(user_id, first_name)
+            keyboard = get_owner_keyboard()
+        else:
+            text = get_start_text(user_id, first_name)
+            keyboard = get_main_keyboard()
         edit_message(chat_id, message_id, text, keyboard)
         answer_callback(callback_id)
     
