@@ -10,7 +10,6 @@ import subprocess
 from io import BytesIO
 from datetime import datetime, timedelta
 from PIL import Image
-from nudenet import NudeDetector
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
@@ -21,19 +20,22 @@ welcome_status = {}
 porn_lock_status = {}
 porn_blocked_users = {}
 
-# ==================== بارگذاری NudeDetector ====================
-try:
-    nude_detector = NudeDetector()
-    logger.info("✅ NudeDetector با موفقیت بارگذاری شد!")
-except Exception as e:
-    logger.error(f"❌ خطا در بارگذاری NudeDetector: {e}")
-    nude_detector = None
-
+# ==================== تنظیمات لاگ ====================
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# ==================== بارگذاری NudeDetector ====================
+nude_detector = None
+try:
+    from nudenet import NudeDetector
+    nude_detector = NudeDetector()
+    logger.info("✅ NudeDetector با موفقیت بارگذاری شد!")
+except Exception as e:
+    logger.error(f"❌ خطا در بارگذاری NudeDetector: {e}")
+    nude_detector = None
 
 def get_iran_time():
     now = datetime.now()
@@ -159,43 +161,68 @@ def download_file(file_id):
         logger.error(f"خطا در دانلود: {e}")
         return None
 
-def extract_frames(video_bytes, frame_interval=2):
-    """استخراج فریم از ویدیو و گیف"""
+def extract_frames_from_video(video_bytes, frame_interval=2, max_frames=10):
+    """استخراج فریم از ویدیو با ffmpeg"""
     frames = []
     try:
-        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_video:
-            temp_video.write(video_bytes)
-            temp_video_path = temp_video.name
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as f:
+            f.write(video_bytes)
+            video_path = f.name
         
-        # استخراج فریم با ffmpeg
         output_pattern = tempfile.mktemp(suffix='_frame_%d.jpg')
+        
         cmd = [
-            'ffmpeg', '-i', temp_video_path,
+            'ffmpeg', '-i', video_path,
             '-vf', f'fps=1/{frame_interval}',
-            '-frames:v', '10',
+            '-frames:v', str(max_frames),
             '-q:v', '2',
             output_pattern
         ]
         
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
         
-        # خواندن فریم‌های استخراج شده
-        for i in range(1, 11):
+        for i in range(1, max_frames + 1):
             frame_path = output_pattern.replace('%d', str(i))
             if os.path.exists(frame_path):
                 with open(frame_path, 'rb') as f:
                     frames.append(f.read())
                 os.remove(frame_path)
         
-        os.remove(temp_video_path)
+        os.remove(video_path)
         return frames
         
     except Exception as e:
         logger.error(f"خطا در استخراج فریم: {e}")
         return []
 
+def extract_frames_from_gif(gif_bytes, max_frames=10):
+    """استخراج فریم از گیف با Pillow"""
+    frames = []
+    try:
+        gif = Image.open(BytesIO(gif_bytes))
+        frame_count = 0
+        
+        while True:
+            frame_bytes = BytesIO()
+            gif.save(frame_bytes, format='PNG')
+            frames.append(frame_bytes.getvalue())
+            frame_count += 1
+            
+            if frame_count >= max_frames:
+                break
+            
+            try:
+                gif.seek(gif.tell() + 1)
+            except EOFError:
+                break
+        
+        return frames
+        
+    except Exception as e:
+        logger.error(f"خطا در استخراج فریم از گیف: {e}")
+        return []
+
 def check_nsfw_with_nudenet(image_bytes):
-    """بررسی با NudeNet"""
     if nude_detector is None:
         return False
     
@@ -217,7 +244,6 @@ def check_nsfw_with_nudenet(image_bytes):
         return False
 
 def check_nsfw_media(file_id, file_type):
-    """تشخیص پورن با NudeNet برای همه نوع رسانه"""
     if not file_id:
         return False
     
@@ -229,9 +255,25 @@ def check_nsfw_media(file_id, file_type):
     if file_type in ["photo", "sticker"]:
         return check_nsfw_with_nudenet(file_bytes)
     
-    # ویدیو، گیف، ویدیو نوت
-    elif file_type in ["video", "animation", "video_note"]:
-        frames = extract_frames(file_bytes, 2)
+    # ویدیو
+    elif file_type == "video":
+        frames = extract_frames_from_video(file_bytes, 2, 10)
+        for frame in frames:
+            if check_nsfw_with_nudenet(frame):
+                return True
+        return False
+    
+    # گیف
+    elif file_type == "animation":
+        frames = extract_frames_from_gif(file_bytes, 10)
+        for frame in frames:
+            if check_nsfw_with_nudenet(frame):
+                return True
+        return False
+    
+    # ویدیو نوت
+    elif file_type == "video_note":
+        frames = extract_frames_from_video(file_bytes, 2, 10)
         for frame in frames:
             if check_nsfw_with_nudenet(frame):
                 return True
@@ -239,7 +281,6 @@ def check_nsfw_media(file_id, file_type):
     
     # فایل
     elif file_type == "document":
-        # فایل‌ها رو فعلاً بررسی نمیکنیم
         return False
     
     return False
@@ -480,42 +521,36 @@ def handle_message(update):
             file_type = None
             has_media = False
             
-            # بررسی عکس
             if "photo" in message:
                 file_id = message["photo"][-1]["file_id"]
                 file_type = "photo"
                 has_media = True
                 is_nsfw = check_nsfw_media(file_id, file_type)
             
-            # بررسی استیکر
             elif "sticker" in message:
                 file_id = message["sticker"]["file_id"]
                 file_type = "sticker"
                 has_media = True
                 is_nsfw = check_nsfw_media(file_id, file_type)
             
-            # بررسی ویدیو
             elif "video" in message:
                 file_id = message["video"]["file_id"]
                 file_type = "video"
                 has_media = True
                 is_nsfw = check_nsfw_media(file_id, file_type)
             
-            # بررسی گیف
             elif "animation" in message:
                 file_id = message["animation"]["file_id"]
                 file_type = "animation"
                 has_media = True
                 is_nsfw = check_nsfw_media(file_id, file_type)
             
-            # بررسی ویدیو نوت
             elif "video_note" in message:
                 file_id = message["video_note"]["file_id"]
                 file_type = "video_note"
                 has_media = True
                 is_nsfw = check_nsfw_media(file_id, file_type)
             
-            # بررسی فایل
             elif "document" in message:
                 file_id = message["document"]["file_id"]
                 file_type = "document"
