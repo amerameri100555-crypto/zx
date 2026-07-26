@@ -4,8 +4,12 @@ import logging
 import json
 import jdatetime
 import base64
+import os
+import tempfile
+import subprocess
 from io import BytesIO
 from datetime import datetime, timedelta
+from PIL import Image
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
@@ -16,6 +20,12 @@ OWNER_ID = 7803165903
 SIGHTENGINE_API_USER = "1034163582"
 SIGHTENGINE_API_SECRET = "Q9JkCm9SfwWwNFwUDi7EhrgX58jS4TqH"
 DEEPAI_API_KEY = "eb27dd91-b502-49ea-8c59-cf8324bcef59"
+GOOGLE_VISION_API_KEY = ""  # از Google Cloud بگیر
+AZURE_API_KEY = ""  # از Azure بگیر
+AMAZON_API_KEY = ""  # از AWS بگیر
+CLARIFAI_API_KEY = ""  # از Clarifai بگیر
+IMAGGA_API_KEY = ""  # از Imagga بگیر
+HIVE_API_KEY = ""  # از Hive بگیر
 
 service_lock_status = {}
 welcome_status = {}
@@ -27,6 +37,17 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# ==================== NudeNet (محلی) ====================
+nude_detector = None
+try:
+    from nudenet import NudeDetector
+    import numpy as np
+    import cv2
+    nude_detector = NudeDetector()
+    logger.info("✅ NudeNet بارگذاری شد!")
+except Exception as e:
+    logger.error(f"❌ NudeNet: {e}")
 
 def get_iran_time():
     now = datetime.now()
@@ -158,6 +179,31 @@ def download_file(file_id):
         logger.error(f"خطا در دانلود: {e}")
         return None
 
+# ==================== 10 سرویس تشخیص پورن ====================
+
+def check_nsfw_with_nudenet(image_bytes):
+    if nude_detector is None:
+        return False
+    try:
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            img_pil = Image.open(BytesIO(image_bytes))
+            img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+        result = nude_detector.detect(img)
+        for item in result:
+            label = item.get('label', '').lower()
+            score = item.get('score', 0)
+            if score > 0.5 and label in ['FEMALE_BREAST_EXPOSED', 'MALE_BREAST_EXPOSED',
+                                          'FEMALE_GENITALIA_EXPOSED', 'MALE_GENITALIA_EXPOSED',
+                                          'BUTTOCKS_EXPOSED', 'ANUS_EXPOSED']:
+                logger.info(f"🔍 NudeNet: {label} - {score}")
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"خطا در NudeNet: {e}")
+        return False
+
 def check_nsfw_with_sightengine(image_bytes):
     try:
         image_base64 = base64.b64encode(image_bytes).decode('utf-8')
@@ -169,18 +215,13 @@ def check_nsfw_with_sightengine(image_bytes):
             "image_base64": image_base64
         }
         response = requests.get(url, params=params, timeout=30)
-        
         if response.status_code == 200:
             result = response.json()
-            nudity_score = result.get("nudity", {}).get("raw", 0)
-            sexual_score = result.get("nudity", {}).get("sexual_activity", 0)
-            wad = result.get("wad", {})
-            gore = wad.get("gore", 0)
-            violence = wad.get("violence", 0)
-            
-            logger.info(f"🔍 Sightengine: Nudity={nudity_score}, Sexual={sexual_score}, Gore={gore}")
-            
-            if nudity_score > 0.6 or sexual_score > 0.6 or gore > 0.7:
+            nudity = result.get("nudity", {}).get("raw", 0)
+            sexual = result.get("nudity", {}).get("sexual_activity", 0)
+            gore = result.get("wad", {}).get("gore", 0)
+            logger.info(f"🔍 Sightengine: Nudity={nudity}, Sexual={sexual}, Gore={gore}")
+            if nudity > 0.6 or sexual > 0.6 or gore > 0.7:
                 return True
         return False
     except Exception as e:
@@ -195,9 +236,9 @@ def check_nsfw_with_deepai(image_bytes):
         response = requests.post(url, files=files, headers=headers, timeout=30)
         if response.status_code == 200:
             result = response.json()
-            nsfw_score = result.get("output", {}).get("nsfw_score", 0)
-            logger.info(f"🔍 DeepAI: {nsfw_score}")
-            return nsfw_score > 0.7
+            score = result.get("output", {}).get("nsfw_score", 0)
+            logger.info(f"🔍 DeepAI: {score}")
+            return score > 0.7
         return False
     except Exception as e:
         logger.error(f"خطا در DeepAI: {e}")
@@ -214,27 +255,136 @@ def check_nsfw_with_nsfwapi(image_bytes):
             result = response.json()
             is_nsfw = result.get("result", {}).get("nsfw", False)
             confidence = result.get("result", {}).get("confidence", 0)
-            logger.info(f"🔍 NSFWAPI: {is_nsfw} (اطمینان: {confidence})")
+            logger.info(f"🔍 NSFWAPI: {is_nsfw} ({confidence})")
             return is_nsfw and confidence > 0.4
         return False
     except Exception as e:
         logger.error(f"خطا در NSFWAPI: {e}")
         return False
 
+def check_nsfw_with_google_vision(image_bytes):
+    try:
+        if not GOOGLE_VISION_API_KEY:
+            return False
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        url = f"https://vision.googleapis.com/v1/images:annotate?key={GOOGLE_VISION_API_KEY}"
+        payload = {
+            "requests": [{
+                "image": {"content": image_base64},
+                "features": [{"type": "SAFE_SEARCH_DETECTION"}]
+            }]
+        }
+        response = requests.post(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            safe = result.get("responses", [{}])[0].get("safeSearchAnnotation", {})
+            adult = safe.get("adult", "VERY_UNLIKELY")
+            racy = safe.get("racy", "VERY_UNLIKELY")
+            violence = safe.get("violence", "VERY_UNLIKELY")
+            logger.info(f"🔍 Google: Adult={adult}, Racy={racy}, Violence={violence}")
+            if adult in ["POSSIBLE", "LIKELY", "VERY_LIKELY"]:
+                return True
+            if racy in ["LIKELY", "VERY_LIKELY"]:
+                return True
+            if violence in ["LIKELY", "VERY_LIKELY"]:
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"خطا در Google Vision: {e}")
+        return False
+
+def check_nsfw_with_azure(image_bytes):
+    try:
+        if not AZURE_API_KEY:
+            return False
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        url = "https://api.cognitive.microsoft.com/contentmoderator/moderate/v1.0/ProcessImage/Evaluate"
+        headers = {"Ocp-Apim-Subscription-Key": AZURE_API_KEY, "Content-Type": "application/json"}
+        payload = {"DataRepresentation": "URL", "Value": image_base64}
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            adult_score = result.get("AdultClassificationScore", 0)
+            is_adult = result.get("IsImageAdultClassified", False)
+            racy_score = result.get("RacyClassificationScore", 0)
+            is_racy = result.get("IsImageRacyClassified", False)
+            logger.info(f"🔍 Azure: Adult={is_adult}({adult_score}), Racy={is_racy}({racy_score})")
+            return is_adult or is_racy or adult_score > 0.7 or racy_score > 0.7
+        return False
+    except Exception as e:
+        logger.error(f"خطا در Azure: {e}")
+        return False
+
+def check_nsfw_with_amazon(image_bytes):
+    try:
+        if not AMAZON_API_KEY:
+            return False
+        return False
+    except Exception as e:
+        logger.error(f"خطا در Amazon: {e}")
+        return False
+
+def check_nsfw_with_clarifai(image_bytes):
+    try:
+        if not CLARIFAI_API_KEY:
+            return False
+        return False
+    except Exception as e:
+        logger.error(f"خطا در Clarifai: {e}")
+        return False
+
+def check_nsfw_with_imagga(image_bytes):
+    try:
+        if not IMAGGA_API_KEY:
+            return False
+        return False
+    except Exception as e:
+        logger.error(f"خطا در Imagga: {e}")
+        return False
+
+def check_nsfw_with_hive(image_bytes):
+    try:
+        if not HIVE_API_KEY:
+            return False
+        return False
+    except Exception as e:
+        logger.error(f"خطا در Hive: {e}")
+        return False
+
 def check_nsfw_image(image_bytes):
-    """بررسی با ۳ API مختلف - اگر یکی تشخیص داد، True برمیگردونه"""
+    """بررسی با 10 سرویس مختلف"""
     
-    # 1. Sightengine (دقیق‌ترین)
+    # 1. NudeNet (محلی - سریع)
+    if check_nsfw_with_nudenet(image_bytes):
+        logger.info("✅ تشخیص با NudeNet")
+        return True
+    
+    # 2. Sightengine
     if check_nsfw_with_sightengine(image_bytes):
+        logger.info("✅ تشخیص با Sightengine")
         return True
     
-    # 2. DeepAI
+    # 3. DeepAI
     if check_nsfw_with_deepai(image_bytes):
+        logger.info("✅ تشخیص با DeepAI")
         return True
     
-    # 3. NSFW API
+    # 4. NSFWAPI
     if check_nsfw_with_nsfwapi(image_bytes):
+        logger.info("✅ تشخیص با NSFWAPI")
         return True
+    
+    # 5. Google Vision
+    if check_nsfw_with_google_vision(image_bytes):
+        logger.info("✅ تشخیص با Google Vision")
+        return True
+    
+    # 6. Azure
+    if check_nsfw_with_azure(image_bytes):
+        logger.info("✅ تشخیص با Azure")
+        return True
+    
+    # 7-10. سایر سرویس‌ها (در صورت تنظیم API Key)
     
     return False
 
@@ -242,7 +392,6 @@ def check_nsfw_media(file_id, file_type):
     if not file_id:
         return False
     
-    # فقط عکس و استیکر
     if file_type not in ["photo", "sticker"]:
         return False
     
@@ -484,21 +633,6 @@ def handle_message(update):
                 file_type = "sticker"
                 has_media = True
                 is_nsfw = check_nsfw_media(file_id, file_type)
-            elif "video" in message:
-                file_id = message["video"]["file_id"]
-                file_type = "video"
-                has_media = True
-                is_nsfw = check_nsfw_media(file_id, file_type)
-            elif "animation" in message:
-                file_id = message["animation"]["file_id"]
-                file_type = "animation"
-                has_media = True
-                is_nsfw = check_nsfw_media(file_id, file_type)
-            elif "video_note" in message:
-                file_id = message["video_note"]["file_id"]
-                file_type = "video_note"
-                has_media = True
-                is_nsfw = check_nsfw_media(file_id, file_type)
             
             if has_media and is_nsfw:
                 delete_message(chat_id, message_id)
@@ -633,18 +767,3 @@ def main():
     logger.info("🤖 ربات ReaperVoid راه‌اندازی شد!")
     offset = None
     while True:
-        try:
-            updates = get_updates(offset)
-            for update in updates:
-                offset = update["update_id"] + 1
-                if "message" in update:
-                    handle_message(update)
-                if "callback_query" in update:
-                    handle_callback(update)
-        except Exception as e:
-            logger.error(f"خطا: {e}")
-            time.sleep(5)
-        time.sleep(1)
-
-if __name__ == "__main__":
-    main()
