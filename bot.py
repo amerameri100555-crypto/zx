@@ -232,7 +232,6 @@ def is_user_blocked(chat_id, user_id):
         return False
 
 def delete_message_after_delay(chat_id, message_id, delay=10):
-    """حذف پیام بعد از delay ثانیه"""
     def delete_later():
         time.sleep(delay)
         delete_message(chat_id, message_id)
@@ -504,7 +503,7 @@ def handle_message(update):
     
     if chat_type in ["group", "supergroup"]:
         
-        # ===== قفل پورن - فقط رسانه‌ها =====
+        # ===== قفل پورن =====
         if porn_lock_status.get(chat_id, False):
             
             if is_user_blocked(chat_id, user_id):
@@ -662,8 +661,15 @@ def handle_callback(update):
         keyboard = get_main_keyboard()
         edit_message(chat_id, message_id, text, keyboard)
         answer_callback(callback_id)
+    
     elif data == "info":
         edit_message(chat_id, message_id, get_info_text(), get_back_keyboard())
         answer_callback(callback_id)
+    
     elif data == "test":
-        edit_message(chat_id, message_id, get_test_guide_text(), get_back_keyboard
+        edit_message(chat_id, message_id, get_test_guide_text(), get_back_keyboard())
+        answer_callback(callback_id)
+    
+    elif data == "compare":
+        edit_message(chat_id, message_id, get_compare_text(), get_back_keyboard())
+       
