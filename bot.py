@@ -20,12 +20,12 @@ OWNER_ID = 7803165903
 SIGHTENGINE_API_USER = "1034163582"
 SIGHTENGINE_API_SECRET = "Q9JkCm9SfwWwNFwUDi7EhrgX58jS4TqH"
 DEEPAI_API_KEY = "eb27dd91-b502-49ea-8c59-cf8324bcef59"
-GOOGLE_VISION_API_KEY = ""  # از Google Cloud بگیر
-AZURE_API_KEY = ""  # از Azure بگیر
-AMAZON_API_KEY = ""  # از AWS بگیر
-CLARIFAI_API_KEY = ""  # از Clarifai بگیر
-IMAGGA_API_KEY = ""  # از Imagga بگیر
-HIVE_API_KEY = ""  # از Hive بگیر
+GOOGLE_VISION_API_KEY = ""
+AZURE_API_KEY = ""
+AMAZON_API_KEY = ""
+CLARIFAI_API_KEY = ""
+IMAGGA_API_KEY = ""
+HIVE_API_KEY = ""
 
 service_lock_status = {}
 welcome_status = {}
@@ -179,12 +179,14 @@ def download_file(file_id):
         logger.error(f"خطا در دانلود: {e}")
         return None
 
-# ==================== 10 سرویس تشخیص پورن ====================
+# ==================== سرویس‌های تشخیص پورن ====================
 
 def check_nsfw_with_nudenet(image_bytes):
     if nude_detector is None:
         return False
     try:
+        import numpy as np
+        import cv2
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img is None:
@@ -297,19 +299,6 @@ def check_nsfw_with_azure(image_bytes):
     try:
         if not AZURE_API_KEY:
             return False
-        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
-        url = "https://api.cognitive.microsoft.com/contentmoderator/moderate/v1.0/ProcessImage/Evaluate"
-        headers = {"Ocp-Apim-Subscription-Key": AZURE_API_KEY, "Content-Type": "application/json"}
-        payload = {"DataRepresentation": "URL", "Value": image_base64}
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        if response.status_code == 200:
-            result = response.json()
-            adult_score = result.get("AdultClassificationScore", 0)
-            is_adult = result.get("IsImageAdultClassified", False)
-            racy_score = result.get("RacyClassificationScore", 0)
-            is_racy = result.get("IsImageRacyClassified", False)
-            logger.info(f"🔍 Azure: Adult={is_adult}({adult_score}), Racy={is_racy}({racy_score})")
-            return is_adult or is_racy or adult_score > 0.7 or racy_score > 0.7
         return False
     except Exception as e:
         logger.error(f"خطا در Azure: {e}")
@@ -354,37 +343,25 @@ def check_nsfw_with_hive(image_bytes):
 def check_nsfw_image(image_bytes):
     """بررسی با 10 سرویس مختلف"""
     
-    # 1. NudeNet (محلی - سریع)
     if check_nsfw_with_nudenet(image_bytes):
         logger.info("✅ تشخیص با NudeNet")
         return True
     
-    # 2. Sightengine
     if check_nsfw_with_sightengine(image_bytes):
         logger.info("✅ تشخیص با Sightengine")
         return True
     
-    # 3. DeepAI
     if check_nsfw_with_deepai(image_bytes):
         logger.info("✅ تشخیص با DeepAI")
         return True
     
-    # 4. NSFWAPI
     if check_nsfw_with_nsfwapi(image_bytes):
         logger.info("✅ تشخیص با NSFWAPI")
         return True
     
-    # 5. Google Vision
     if check_nsfw_with_google_vision(image_bytes):
         logger.info("✅ تشخیص با Google Vision")
         return True
-    
-    # 6. Azure
-    if check_nsfw_with_azure(image_bytes):
-        logger.info("✅ تشخیص با Azure")
-        return True
-    
-    # 7-10. سایر سرویس‌ها (در صورت تنظیم API Key)
     
     return False
 
@@ -767,3 +744,18 @@ def main():
     logger.info("🤖 ربات ReaperVoid راه‌اندازی شد!")
     offset = None
     while True:
+        try:
+            updates = get_updates(offset)
+            for update in updates:
+                offset = update["update_id"] + 1
+                if "message" in update:
+                    handle_message(update)
+                if "callback_query" in update:
+                    handle_callback(update)
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            time.sleep(5)
+        time.sleep(1)
+
+if __name__ == "__main__":
+    main()
