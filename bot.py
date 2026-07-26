@@ -7,8 +7,6 @@ import base64
 import os
 import tempfile
 import subprocess
-import numpy as np
-import cv2
 from io import BytesIO
 from datetime import datetime, timedelta
 from PIL import Image
@@ -17,6 +15,12 @@ TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 OWNER_ID = 7803165903
+
+# ==================== تنظیمات Sightengine ====================
+# ثبت نام در https://sightengine.com/ و دریافت API Key
+SIGHTENGINE_API_USER = "1034163582"  # از سایت بگیر
+SIGHTENGINE_API_SECRET = "Q9JkCm9SfwWwNFwUDi7EhrgX58jS4TqH"  # از سایت بگیر
+
 service_lock_status = {}
 welcome_status = {}
 porn_lock_status = {}
@@ -27,16 +31,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# ==================== بارگذاری NudeDetector ====================
-nude_detector = None
-try:
-    from nudenet import NudeDetector
-    nude_detector = NudeDetector()
-    logger.info("✅ NudeDetector با موفقیت بارگذاری شد!")
-except Exception as e:
-    logger.error(f"❌ خطا در بارگذاری NudeDetector: {e}")
-    nude_detector = None
 
 def get_iran_time():
     now = datetime.now()
@@ -162,6 +156,39 @@ def download_file(file_id):
         logger.error(f"خطا در دانلود: {e}")
         return None
 
+def check_nsfw_with_sightengine(image_bytes):
+    """بررسی با Sightengine API (رایگان و دقیق)"""
+    try:
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        url = "https://api.sightengine.com/1.0/check.json"
+        params = {
+            "api_user": SIGHTENGINE_API_USER,
+            "api_secret": SIGHTENGINE_API_SECRET,
+            "models": "nudity-2.0,wad",
+            "image_base64": image_base64
+        }
+        response = requests.get(url, params=params, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            # بررسی نمره nudity
+            nudity_score = result.get("nudity", {}).get("raw", 0)
+            sexual_score = result.get("nudity", {}).get("sexual_activity", 0)
+            # بررسی محتوای نامناسب
+            wad = result.get("wad", {})
+            gore = wad.get("gore", 0)
+            violence = wad.get("violence", 0)
+            
+            logger.info(f"🔍 Sightengine - Nudity: {nudity_score}, Sexual: {sexual_score}, Gore: {gore}")
+            
+            # اگر هر کدوم بیشتر از 0.7 بود
+            if nudity_score > 0.7 or sexual_score > 0.7 or gore > 0.7:
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"خطا در Sightengine: {e}")
+        return False
+
 def extract_frames_from_video(video_bytes, frame_interval=2, max_frames=10):
     frames = []
     try:
@@ -221,39 +248,6 @@ def extract_frames_from_gif(gif_bytes, max_frames=10):
         logger.error(f"خطا در استخراج فریم از گیف: {e}")
         return []
 
-def check_nsfw_with_nudenet(image_bytes):
-    if nude_detector is None:
-        return False
-    
-    try:
-        # تبدیل bytes به numpy array با OpenCV
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if img is None:
-            # اگه با cv2 نشد، با PIL امتحان کن
-            try:
-                img_pil = Image.open(BytesIO(image_bytes))
-                img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-            except:
-                return False
-        
-        # تشخیص با NudeDetector
-        result = nude_detector.detect(img)
-        
-        for item in result:
-            label = item.get('label', '').lower()
-            score = item.get('score', 0)
-            if score > 0.5 and label in ['FEMALE_BREAST_EXPOSED', 'MALE_BREAST_EXPOSED',
-                                          'FEMALE_GENITALIA_EXPOSED', 'MALE_GENITALIA_EXPOSED',
-                                          'BUTTOCKS_EXPOSED', 'ANUS_EXPOSED']:
-                logger.info(f"🔞 NudeNet: {label} - {score}")
-                return True
-        return False
-    except Exception as e:
-        logger.error(f"خطا در NudeNet: {e}")
-        return False
-
 def check_nsfw_media(file_id, file_type):
     if not file_id:
         return False
@@ -264,13 +258,13 @@ def check_nsfw_media(file_id, file_type):
     
     # عکس و استیکر
     if file_type in ["photo", "sticker"]:
-        return check_nsfw_with_nudenet(file_bytes)
+        return check_nsfw_with_sightengine(file_bytes)
     
     # ویدیو
     elif file_type == "video":
         frames = extract_frames_from_video(file_bytes, 2, 10)
         for frame in frames:
-            if check_nsfw_with_nudenet(frame):
+            if check_nsfw_with_sightengine(frame):
                 return True
         return False
     
@@ -278,7 +272,7 @@ def check_nsfw_media(file_id, file_type):
     elif file_type == "animation":
         frames = extract_frames_from_gif(file_bytes, 10)
         for frame in frames:
-            if check_nsfw_with_nudenet(frame):
+            if check_nsfw_with_sightengine(frame):
                 return True
         return False
     
@@ -286,7 +280,7 @@ def check_nsfw_media(file_id, file_type):
     elif file_type == "video_note":
         frames = extract_frames_from_video(file_bytes, 2, 10)
         for frame in frames:
-            if check_nsfw_with_nudenet(frame):
+            if check_nsfw_with_sightengine(frame):
                 return True
         return False
     
@@ -314,7 +308,7 @@ def delete_message_after_delay(chat_id, message_id, delay=10):
     import threading
     threading.Thread(target=delete_later, daemon=True).start()
 
-# ==================== متن‌ها ====================
+# ==================== متن‌ها و کیبوردها (همون قبلی) ====================
 
 def get_start_text(user_id, first_name):
     date_str, time_str = get_iran_time()
@@ -520,9 +514,7 @@ def handle_message(update):
     
     if chat_type in ["group", "supergroup"]:
         
-        # ===== قفل پورن =====
         if porn_lock_status.get(chat_id, False):
-            
             if is_user_blocked(chat_id, user_id):
                 delete_message(chat_id, message_id)
                 return
@@ -537,34 +529,24 @@ def handle_message(update):
                 file_type = "photo"
                 has_media = True
                 is_nsfw = check_nsfw_media(file_id, file_type)
-            
             elif "sticker" in message:
                 file_id = message["sticker"]["file_id"]
                 file_type = "sticker"
                 has_media = True
                 is_nsfw = check_nsfw_media(file_id, file_type)
-            
             elif "video" in message:
                 file_id = message["video"]["file_id"]
                 file_type = "video"
                 has_media = True
                 is_nsfw = check_nsfw_media(file_id, file_type)
-            
             elif "animation" in message:
                 file_id = message["animation"]["file_id"]
                 file_type = "animation"
                 has_media = True
                 is_nsfw = check_nsfw_media(file_id, file_type)
-            
             elif "video_note" in message:
                 file_id = message["video_note"]["file_id"]
                 file_type = "video_note"
-                has_media = True
-                is_nsfw = check_nsfw_media(file_id, file_type)
-            
-            elif "document" in message:
-                file_id = message["document"]["file_id"]
-                file_type = "document"
                 has_media = True
                 is_nsfw = check_nsfw_media(file_id, file_type)
             
@@ -584,7 +566,6 @@ def handle_message(update):
                 logger.info(f"🔞 رسانه پورن از {first_name} حذف شد")
                 return
         
-        # ===== خدمات تلگرام =====
         if service_lock_status.get(chat_id, False):
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
@@ -618,7 +599,6 @@ def handle_message(update):
                             delete_message_after_delay(chat_id, mid, 10)
                 return
         
-        # ===== دستورات ادمین =====
         if is_admin(chat_id, user_id):
             if text in ["قفل خدمات تلگرام", "/lock_service"]:
                 service_lock_status[chat_id] = True
@@ -637,7 +617,6 @@ def handle_message(update):
                 send_message(chat_id, "<b>◄ خوش آمدگویی غیرفعال شد !</b>", reply_to_message_id=message_id)
                 return
         
-        # ===== دستورات سازنده =====
         if user_id == OWNER_ID:
             if text in ["قفل پورن", "/lock_porn"]:
                 porn_lock_status[chat_id] = True
