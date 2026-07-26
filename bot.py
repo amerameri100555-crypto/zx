@@ -45,7 +45,7 @@ def send_message(chat_id, text, keyboard=None, reply_to_message_id=None):
     if reply_to_message_id:
         payload["reply_to_message_id"] = reply_to_message_id
     try:
-        response = requests.post(url, json=payload, timeout=15)
+        response = requests.post(url, json=payload, timeout=30)
         if response.status_code != 200:
             logger.error(f"خطا در ارسال: {response.text}")
         return response
@@ -57,7 +57,7 @@ def delete_message(chat_id, message_id):
     url = f"{BASE_URL}/deleteMessage"
     payload = {"chat_id": chat_id, "message_id": message_id}
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, timeout=30)
         if response.status_code != 200:
             logger.error(f"خطا در حذف: {response.text}")
         return response
@@ -71,7 +71,7 @@ def edit_message(chat_id, message_id, text, keyboard=None):
     if keyboard:
         payload["reply_markup"] = keyboard
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, timeout=30)
         if response.status_code != 200:
             logger.error(f"خطا در ویرایش: {response.text}")
         return response
@@ -83,7 +83,7 @@ def answer_callback(callback_id):
     url = f"{BASE_URL}/answerCallbackQuery"
     payload = {"callback_query_id": callback_id}
     try:
-        requests.post(url, json=payload, timeout=5)
+        requests.post(url, json=payload, timeout=30)
     except Exception as e:
         logger.error(f"خطا: {e}")
 
@@ -91,7 +91,7 @@ def get_chat_member(chat_id, user_id):
     url = f"{BASE_URL}/getChatMember"
     payload = {"chat_id": chat_id, "user_id": user_id}
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, timeout=30)
         if response.status_code == 200:
             return response.json().get("result", {})
         return {}
@@ -115,7 +115,7 @@ def restrict_user(chat_id, user_id, until_date):
         "until_date": until_date
     }
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, timeout=30)
         if response.status_code == 200:
             logger.info(f"✅ کاربر {user_id} محدود شد")
             return True
@@ -133,9 +133,9 @@ def is_admin(chat_id, user_id):
 
 def get_updates(offset=None):
     url = f"{BASE_URL}/getUpdates"
-    params = {"timeout": 30, "offset": offset}
+    params = {"timeout": 60, "offset": offset}
     try:
-        response = requests.get(url, params=params, timeout=20)
+        response = requests.get(url, params=params, timeout=60)
         if response.status_code == 200:
             return response.json().get("result", [])
         return []
@@ -149,12 +149,12 @@ def download_file(file_id):
     url = f"{BASE_URL}/getFile"
     payload = {"file_id": file_id}
     try:
-        response = requests.post(url, json=payload, timeout=15)
+        response = requests.post(url, json=payload, timeout=30)
         if response.status_code == 200:
             file_path = response.json().get("result", {}).get("file_path")
             if file_path:
                 file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
-                file_response = requests.get(file_url, timeout=20)
+                file_response = requests.get(file_url, timeout=30)
                 if file_response.status_code == 200:
                     return file_response.content
         return None
@@ -168,7 +168,7 @@ def check_nsfw_with_api(image_bytes):
         url = "https://nsfwapi.xyz/api/v1/detect"
         payload = {"image": image_base64}
         headers = {"Content-Type": "application/json"}
-        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
         if response.status_code == 200:
             result = response.json()
             is_nsfw = result.get("result", {}).get("nsfw", False)
@@ -668,4 +668,11 @@ def handle_callback(update):
     
     elif data == "test":
         edit_message(chat_id, message_id, get_test_guide_text(), get_back_keyboard())
-        answer
+        answer_callback(callback_id)
+    
+    elif data == "compare":
+        edit_message(chat_id, message_id, get_compare_text(), get_back_keyboard())
+        answer_callback(callback_id)
+    
+    elif data == "price":
+        edit_message(chat_id,
