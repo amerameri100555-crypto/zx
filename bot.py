@@ -18,8 +18,8 @@ OWNER_ID = 7803165903
 
 # ==================== تنظیمات Sightengine ====================
 # ثبت نام در https://sightengine.com/ و دریافت API Key
-SIGHTENGINE_API_USER = "1034163582"  # از سایت بگیر
-SIGHTENGINE_API_SECRET = "Q9JkCm9SfwWwNFwUDi7EhrgX58jS4TqH"  # از سایت بگیر
+SIGHTENGINE_API_USER = "612529233"  # از سایت بگیر
+SIGHTENGINE_API_SECRET = "QAbjunjRfSbsYJxuEZYUEphbFKUpK4Jz"  # از سایت بگیر
 
 service_lock_status = {}
 welcome_status = {}
