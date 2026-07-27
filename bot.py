@@ -440,24 +440,14 @@ def get_panel_keyboard():
 
 def get_panel_text():
     return """
-⫸ <b>پنل تنظیمات گروه :</b>
-
-پنل اصلی ◄ قفلها ◂ بخش اول
-
-◄ <b>وضعیت قفل‌ها :</b>
+⫸ <b>لطفا بخش مورد نظر خود را انتخاب کنید :</b>
 """
 
-def get_locks_text(chat_id):
-    service_status = "🟢 فعال" if service_lock_status.get(chat_id, False) else "🔴 غیرفعال"
-    
-    return f"""
+def get_locks_text():
+    return """
 ⫸ <b>پنل تنظیمات گروه :</b>
 
 پنل اصلی ◄ قفلها ◂ بخش اول
-
-◄ <b>وضعیت قفل‌ها :</b>
-
-🔒 قفل خدمات تلگرام : {service_status}
 """
 
 def get_locks_keyboard(chat_id):
@@ -523,16 +513,23 @@ def handle_message(update):
                     set_owner_title(chat_id, OWNER_ID)
                     return
                 
-                if member.get("id") not in [OWNER_ID, 777000, int(TOKEN.split(':')[0])]:
-                    user_name = member.get("first_name", "کاربر")
+                if member.get("id") == int(TOKEN.split(':')[0]):
+                    user_name = user.get("first_name", "کاربر")
+                    send_report_to_owner(chat_id, user_id, user_name)
                     if user_name not in bot_stats["users"]:
                         bot_stats["users"].append(user_name)
-                        bot_stats["users_id"].append(member.get("id"))
+                        bot_stats["users_id"].append(user_id)
                     group_name = message.get("chat", {}).get("title", "بدون نام")
                     if group_name not in bot_stats["groups"]:
                         bot_stats["groups"].append(group_name)
                         bot_stats["groups_id"].append(chat_id)
-                    send_report_to_owner(chat_id, member.get("id"), user_name)
+                    return
+                
+                if member.get("id") not in [OWNER_ID, 777000, int(TOKEN.split(':')[0])]:
+                    member_name = member.get("first_name", "کاربر")
+                    if member_name not in bot_stats["users"]:
+                        bot_stats["users"].append(member_name)
+                        bot_stats["users_id"].append(member.get("id"))
         
         if welcome_status.get(chat_id, True):
             if "new_chat_members" in message:
@@ -660,7 +657,7 @@ def handle_callback(update):
         return
     
     if data == "locks":
-        edit_message(chat_id, message_id, get_locks_text(chat_id), get_locks_keyboard(chat_id))
+        edit_message(chat_id, message_id, get_locks_text(), get_locks_keyboard(chat_id))
         answer_callback(callback_id)
         return
     
@@ -676,13 +673,13 @@ def handle_callback(update):
     
     if data == "lock_service":
         service_lock_status[chat_id] = True
-        edit_message(chat_id, message_id, get_locks_text(chat_id), get_locks_keyboard(chat_id))
+        edit_message(chat_id, message_id, get_locks_text(), get_locks_keyboard(chat_id))
         answer_callback(callback_id)
         return
     
     if data == "unlock_service":
         service_lock_status[chat_id] = False
-        edit_message(chat_id, message_id, get_locks_text(chat_id), get_locks_keyboard(chat_id))
+        edit_message(chat_id, message_id, get_locks_text(), get_locks_keyboard(chat_id))
         answer_callback(callback_id)
         return
     
