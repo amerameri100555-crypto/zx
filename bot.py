@@ -14,12 +14,10 @@ service_lock_status = {}
 welcome_status = {}
 
 bot_stats = {
-    "total_users": 0,
-    "total_groups": 0,
-    "users_list": [],
-    "users_id_list": [],
-    "groups_list": [],
-    "groups_id_list": []
+    "users": [],
+    "users_id": [],
+    "groups": [],
+    "groups_id": []
 }
 
 logging.basicConfig(
@@ -184,26 +182,99 @@ def get_group_info(chat_id):
         logger.error(f"خطا در دریافت اطلاعات گروه: {e}")
         return {}
 
+def get_group_members_count(chat_id):
+    url = f"{BASE_URL}/getChatMembersCount"
+    try:
+        response = requests.get(url, json={"chat_id": chat_id}, timeout=30)
+        if response.status_code == 200:
+            return response.json().get("result", 0)
+        return 0
+    except:
+        return 0
+
+def get_group_owner(chat_id):
+    try:
+        url = f"{BASE_URL}/getChatMember"
+        payload = {"chat_id": chat_id, "user_id": OWNER_ID}
+        response = requests.get(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            result = response.json().get("result", {})
+            if result.get("status") == "creator":
+                user = result.get("user", {})
+                return f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+        return "نامشخص"
+    except:
+        return "نامشخص"
+
+def send_report_to_owner(chat_id, user_id, user_name):
+    group_info = get_group_info(chat_id)
+    group_name = group_info.get("title", "بدون نام")
+    group_username = group_info.get("username", "")
+    group_link = f"https://t.me/{group_username}" if group_username else "گروه خصوصی"
+    member_count = get_group_members_count(chat_id)
+    owner = get_group_owner(chat_id)
+    
+    report_text = f"""
+📊 <b>گزارش اضافه شدن ربات به گروه</b>
+
+⫸ <b>کاربر اضافه‌کننده :</b> <a href='tg://user?id={user_id}'>{user_name}</a>
+⫸ <b>نام گروه :</b> {group_name}
+⫸ <b>لینک گروه :</b> {group_link}
+⫸ <b>تعداد اعضا :</b> {member_count}
+⫸ <b>مالک گروه :</b> {owner}
+"""
+    send_message(OWNER_ID, report_text)
+
+def get_all_users_text():
+    text = "👤 <b>لیست کاربران ربات</b>\n\n"
+    if bot_stats["users"]:
+        text += f"تعداد کل: {len(bot_stats['users'])}\n\n"
+        for i, (name, uid) in enumerate(zip(bot_stats["users"], bot_stats["users_id"]), 1):
+            text += f"{i}. <a href='tg://user?id={uid}'>{name}</a>\n"
+    else:
+        text += "هنوز کاربری ثبت نشده"
+    return text
+
+def get_all_groups_text():
+    text = "📁 <b>لیست گروه‌های ربات</b>\n\n"
+    if bot_stats["groups"]:
+        text += f"تعداد کل: {len(bot_stats['groups'])}\n\n"
+        for i, (name, gid) in enumerate(zip(bot_stats["groups"], bot_stats["groups_id"]), 1):
+            group_info = get_group_info(gid)
+            group_username = group_info.get("username", "")
+            member_count = get_group_members_count(gid)
+            owner = get_group_owner(gid)
+            if group_username:
+                link = f"https://t.me/{group_username}"
+                text += f"{i}. <a href='{link}'>{name}</a> (👥 {member_count} - 👑 {owner})\n"
+            else:
+                text += f"{i}. {name} (🔒 خصوصی - 👥 {member_count} - 👑 {owner})\n"
+    else:
+        text += "هنوز گروهی ثبت نشده"
+    return text
+
 def get_stats_text():
-    total_users = len(bot_stats["users_list"])
-    total_groups = len(bot_stats["groups_list"])
+    total_users = len(bot_stats["users"])
+    total_groups = len(bot_stats["groups"])
     
     users_text = ""
-    if bot_stats["users_list"]:
-        for name, uid in list(zip(bot_stats["users_list"], bot_stats["users_id_list"]))[-10:]:
+    if bot_stats["users"]:
+        for name, uid in list(zip(bot_stats["users"], bot_stats["users_id"]))[-10:]:
             users_text += f"◄ <a href='tg://user?id={uid}'>{name}</a>\n"
     else:
         users_text = "◄ هنوز کاربری ثبت نشده"
     
     groups_text = ""
-    if bot_stats["groups_list"]:
-        for name, gid in list(zip(bot_stats["groups_list"], bot_stats["groups_id_list"]))[-10:]:
+    if bot_stats["groups"]:
+        for name, gid in list(zip(bot_stats["groups"], bot_stats["groups_id"]))[-10:]:
             group_info = get_group_info(gid)
             group_username = group_info.get("username", "")
+            member_count = get_group_members_count(gid)
+            owner = get_group_owner(gid)
             if group_username:
-                groups_text += f"◄ <a href='https://t.me/{group_username}'>{name}</a>\n"
+                groups_text += f"◄ <a href='https://t.me/{group_username}'>{name}</a> (👥 {member_count} - 👑 {owner})\n"
             else:
-                groups_text += f"◄ {name} (🔒 خصوصی)\n"
+                groups_text += f"◄ {name} (🔒 خصوصی - 👥 {member_count} - 👑 {owner})\n"
     else:
         groups_text = "◄ هنوز گروهی ثبت نشده"
     
@@ -231,8 +302,8 @@ def get_owner_start_text():
 ◄ از اینجا می‌توانید تمامی تنظیمات و آمار ربات را مدیریت کنید.
 
 ◂ <b>📊 وضعیت فعلی :</b>
-• تعداد کل کاربران : <b>{len(bot_stats["users_list"])}</b>
-• تعداد کل گروه‌ها : <b>{len(bot_stats["groups_list"])}</b>
+• تعداد کل کاربران : <b>{len(bot_stats["users"])}</b>
+• تعداد کل گروه‌ها : <b>{len(bot_stats["groups"])}</b>
 
 ──┅┅┅┅┅┅┅┅┅┅┅┅┅──
 
@@ -244,6 +315,14 @@ def get_owner_keyboard():
         [{"text": "📊 آمار کامل", "callback_data": "stats"}],
         [{"text": "📡 بررسی پینگ", "callback_data": "ping"}],
         [{"text": "⏳ اعتبار هاست", "callback_data": "credit"}]
+    ]
+    return json.dumps({"inline_keyboard": keyboard})
+
+def get_stats_keyboard():
+    keyboard = [
+        [{"text": "👤 کاربران ربات", "callback_data": "all_users"}],
+        [{"text": "📁 گروه‌های ربات", "callback_data": "all_groups"}],
+        [{"text": "🔙 بازگشت به منوی اصلی", "callback_data": "back_owner"}]
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
@@ -418,7 +497,6 @@ def handle_message(update):
     
     if chat_type in ["group", "supergroup"]:
         
-        # ===== ورود سازنده =====
         if "new_chat_members" in message:
             for member in message["new_chat_members"]:
                 if member.get("id") == OWNER_ID:
@@ -428,35 +506,33 @@ def handle_message(update):
                 
                 if member.get("id") not in [OWNER_ID, 777000, int(TOKEN.split(':')[0])]:
                     user_name = member.get("first_name", "کاربر")
-                    if user_name not in bot_stats["users_list"]:
-                        bot_stats["users_list"].append(user_name)
+                    if user_name not in bot_stats["users"]:
+                        bot_stats["users"].append(user_name)
+                        bot_stats["users_id"].append(member.get("id"))
                     group_name = message.get("chat", {}).get("title", "بدون نام")
-                    if group_name not in bot_stats["groups_list"]:
-                        bot_stats["groups_list"].append(group_name)
+                    if group_name not in bot_stats["groups"]:
+                        bot_stats["groups"].append(group_name)
+                        bot_stats["groups_id"].append(chat_id)
+                    send_report_to_owner(chat_id, member.get("id"), user_name)
         
-        # ===== خوش آمدگویی =====
         if welcome_status.get(chat_id, True):
             if "new_chat_members" in message:
                 for member in message["new_chat_members"]:
                     if member.get("id") not in [OWNER_ID, 777000, int(TOKEN.split(':')[0])]:
                         member_name = member.get("first_name", "کاربر")
                         group_name = message.get("chat", {}).get("title", "گروه")
-                        welcome_text = get_welcome_text(member_name, group_name, member_id)
+                        welcome_text = get_welcome_text(member_name, group_name, member.get("id"))
                         msg = send_message(chat_id, welcome_text)
                         if msg and msg.status_code == 200:
                             mid = msg.json().get("result", {}).get("message_id")
                             if mid:
                                 delete_message_after_delay(chat_id, mid, 10)
         
-        # ===== قفل خدمات =====
         if service_lock_status.get(chat_id, False):
             if "new_chat_members" in message or "left_chat_member" in message:
                 delete_message(chat_id, message_id)
                 return
         
-        # ===== دستورات =====
-        
-        # ===== پنل =====
         if text == "پنل":
             if is_admin(chat_id, user_id) or user_id == OWNER_ID:
                 send_message(chat_id, get_panel_text(), get_panel_keyboard(), reply_to_message_id=message_id)
@@ -464,7 +540,6 @@ def handle_message(update):
                 send_message(chat_id, "⫸ ✗ شما دسترسی به پنل ندارید !", reply_to_message_id=message_id)
             return
         
-        # ===== پاکسازی کامل گروه =====
         if text == "پاکسازی گروه":
             if is_admin(chat_id, user_id) or user_id == OWNER_ID:
                 msg = send_message(chat_id, "<b>⫸ پاکسازی گروه شروع شد لطفا صبر نمایید !</b>", reply_to_message_id=message_id)
@@ -503,7 +578,6 @@ def handle_message(update):
                         edit_message(chat_id, msg_id, f"<b>❌ خطا: {e}</b>")
             return
         
-        # ===== دستورات ادمین =====
         if is_admin(chat_id, user_id) or user_id == OWNER_ID:
             if text == "قفل خدمات تلگرام":
                 service_lock_status[chat_id] = True
@@ -527,8 +601,9 @@ def handle_message(update):
     
     elif chat_type == "private":
         if text == "/start":
-            if first_name not in bot_stats["users_list"]:
-                bot_stats["users_list"].append(first_name)
+            if first_name not in bot_stats["users"]:
+                bot_stats["users"].append(first_name)
+                bot_stats["users_id"].append(user_id)
             
             if user_id == OWNER_ID:
                 send_message(chat_id, get_owner_start_text(), get_owner_keyboard(), reply_to_message_id=message_id)
@@ -556,7 +631,6 @@ def handle_callback(update):
         answer_callback(callback_id)
         return
     
-    # ===== پنل قفل‌ها =====
     if data == "locks":
         edit_message(chat_id, message_id, get_locks_text(chat_id), get_locks_keyboard(chat_id))
         answer_callback(callback_id)
@@ -567,7 +641,6 @@ def handle_callback(update):
         answer_callback(callback_id)
         return
     
-    # ===== قفل خدمات =====
     if data == "lock_service":
         service_lock_status[chat_id] = True
         edit_message(chat_id, message_id, get_locks_text(chat_id), get_locks_keyboard(chat_id))
@@ -580,7 +653,6 @@ def handle_callback(update):
         answer_callback(callback_id)
         return
     
-    # ===== خوش آمدگویی =====
     if data == "enable_welcome":
         welcome_status[chat_id] = True
         edit_message(chat_id, message_id, get_locks_text(chat_id), get_locks_keyboard(chat_id))
@@ -593,10 +665,24 @@ def handle_callback(update):
         answer_callback(callback_id)
         return
     
-    # ===== دکمه‌های برنامه نویس =====
     if user_id == OWNER_ID:
         if data == "stats":
-            edit_message(chat_id, message_id, get_stats_text(), get_owner_keyboard())
+            edit_message(chat_id, message_id, get_stats_text(), get_stats_keyboard())
+            answer_callback(callback_id)
+            return
+        
+        if data == "all_users":
+            edit_message(chat_id, message_id, get_all_users_text(), get_stats_keyboard())
+            answer_callback(callback_id)
+            return
+        
+        if data == "all_groups":
+            edit_message(chat_id, message_id, get_all_groups_text(), get_stats_keyboard())
+            answer_callback(callback_id)
+            return
+        
+        if data == "back_owner":
+            edit_message(chat_id, message_id, get_owner_start_text(), get_owner_keyboard())
             answer_callback(callback_id)
             return
         
@@ -618,7 +704,6 @@ def handle_callback(update):
             answer_callback(callback_id)
             return
     
-    # ===== دکمه‌های عمومی =====
     if data == "back":
         if user_id == OWNER_ID:
             text = get_owner_start_text()
