@@ -12,6 +12,7 @@ OWNER_ID = 7803165903
 
 service_lock_status = {}
 welcome_status = {}
+panel_users = {}
 
 bot_stats = {
     "users": [],
@@ -432,18 +433,22 @@ def get_back_keyboard():
 
 def get_panel_keyboard():
     keyboard = [
-        [{"text": "🔒 قفل‌ها", "callback_data": "locks"}]
+        [{"text": "🔒 قفل‌ها", "callback_data": "locks"}],
+        [{"text": "⚙️ تنظیمات پیشرفته", "callback_data": "advanced"}]
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
 def get_panel_text():
     return """
-⫸ <b>لطفا بخش مورد نظر خود را انتخاب کنید :</b>
+⫸ <b>پنل تنظیمات گروه :</b>
+
+پنل اصلی ◄ قفلها ◂ بخش اول
+
+◄ <b>وضعیت قفل‌ها :</b>
 """
 
 def get_locks_text(chat_id):
     service_status = "🟢 فعال" if service_lock_status.get(chat_id, False) else "🔴 غیرفعال"
-    welcome_status_text = "🟢 فعال" if welcome_status.get(chat_id, True) else "🔴 غیرفعال"
     
     return f"""
 ⫸ <b>پنل تنظیمات گروه :</b>
@@ -453,7 +458,6 @@ def get_locks_text(chat_id):
 ◄ <b>وضعیت قفل‌ها :</b>
 
 🔒 قفل خدمات تلگرام : {service_status}
-👋 خوش آمدگویی : {welcome_status_text}
 """
 
 def get_locks_keyboard(chat_id):
@@ -466,6 +470,22 @@ def get_locks_keyboard(chat_id):
         service_text = "🔒 قفل خدمات تلگرام"
         service_data = "lock_service"
     
+    keyboard = [
+        [{"text": service_text, "callback_data": service_data}],
+        [{"text": "🔙 بازگشت به پنل", "callback_data": "panel_back"}]
+    ]
+    return json.dumps({"inline_keyboard": keyboard})
+
+def get_advanced_text(chat_id):
+    welcome_status_text = "🟢 فعال" if welcome_status.get(chat_id, True) else "🔴 غیرفعال"
+    
+    return f"""
+⫸ <b>تنظیمات پیشرفته :</b>
+
+◄ <b>وضعیت خوش آمدگویی :</b> {welcome_status_text}
+"""
+
+def get_advanced_keyboard(chat_id):
     welcome_status_text = welcome_status.get(chat_id, True)
     
     if welcome_status_text:
@@ -476,7 +496,6 @@ def get_locks_keyboard(chat_id):
         welcome_data = "enable_welcome"
     
     keyboard = [
-        [{"text": service_text, "callback_data": service_data}],
         [{"text": welcome_text, "callback_data": welcome_data}],
         [{"text": "🔙 بازگشت به پنل", "callback_data": "panel_back"}]
     ]
@@ -534,8 +553,13 @@ def handle_message(update):
                 return
         
         if text == "پنل":
-            if is_admin(chat_id, user_id) or user_id == OWNER_ID:
-                send_message(chat_id, get_panel_text(), get_panel_keyboard(), reply_to_message_id=message_id)
+            if is_admin(chat_id, user_id):
+                if chat_id not in panel_users:
+                    panel_users[chat_id] = user_id
+                if panel_users[chat_id] == user_id:
+                    send_message(chat_id, get_panel_text(), get_panel_keyboard(), reply_to_message_id=message_id)
+                else:
+                    send_message(chat_id, "⫸ ✗ پنل برای شما نیست !", reply_to_message_id=message_id)
             else:
                 send_message(chat_id, "⫸ ✗ شما دسترسی به پنل ندارید !", reply_to_message_id=message_id)
             return
@@ -578,7 +602,7 @@ def handle_message(update):
                         edit_message(chat_id, msg_id, f"<b>❌ خطا: {e}</b>")
             return
         
-        if is_admin(chat_id, user_id) or user_id == OWNER_ID:
+        if is_admin(chat_id, user_id):
             if text == "قفل خدمات تلگرام":
                 service_lock_status[chat_id] = True
                 send_message(chat_id, "<b>◂ قفل خدمات تلگرام فعال شد !</b>", reply_to_message_id=message_id)
@@ -627,12 +651,21 @@ def handle_callback(update):
     if not chat_id or not data:
         return
     
+    if chat_id in panel_users and panel_users[chat_id] != user_id:
+        answer_callback(callback_id)
+        return
+    
     if not (is_admin(chat_id, user_id) or user_id == OWNER_ID):
         answer_callback(callback_id)
         return
     
     if data == "locks":
         edit_message(chat_id, message_id, get_locks_text(chat_id), get_locks_keyboard(chat_id))
+        answer_callback(callback_id)
+        return
+    
+    if data == "advanced":
+        edit_message(chat_id, message_id, get_advanced_text(chat_id), get_advanced_keyboard(chat_id))
         answer_callback(callback_id)
         return
     
@@ -655,13 +688,13 @@ def handle_callback(update):
     
     if data == "enable_welcome":
         welcome_status[chat_id] = True
-        edit_message(chat_id, message_id, get_locks_text(chat_id), get_locks_keyboard(chat_id))
+        edit_message(chat_id, message_id, get_advanced_text(chat_id), get_advanced_keyboard(chat_id))
         answer_callback(callback_id)
         return
     
     if data == "disable_welcome":
         welcome_status[chat_id] = False
-        edit_message(chat_id, message_id, get_locks_text(chat_id), get_locks_keyboard(chat_id))
+        edit_message(chat_id, message_id, get_advanced_text(chat_id), get_advanced_keyboard(chat_id))
         answer_callback(callback_id)
         return
     
