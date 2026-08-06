@@ -4,6 +4,8 @@ import logging
 import json
 import jdatetime
 import os
+import platform
+import psutil
 from datetime import datetime, timedelta
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
@@ -33,7 +35,6 @@ def save_stats(stats):
     except Exception as e:
         logger.error(f"خطا در ذخیره آمار: {e}")
 
-# بارگذاری آمار از فایل
 bot_stats = load_stats()
 
 logging.basicConfig(
@@ -295,7 +296,7 @@ def get_stats_text():
         groups_text = "📭 هنوز گروهی ثبت نشده"
     
     return f"""
-📊 <b>آمار ربات ReaperVoid</b>
+📊 <b>آمار کامل ربات ReaperVoid</b>
 
 📈 <b>آمار کلی :</b>
 
@@ -308,6 +309,71 @@ def get_stats_text():
 🕒 <b>۱۰ گروه اخیر :</b>
 {groups_text}
 """
+
+def get_ping_text():
+    try:
+        import time as t
+        start = t.time()
+        requests.get(f"{BASE_URL}/getMe", timeout=30)
+        ping = round((t.time() - start) * 1000, 2)
+        
+        # اطلاعات سرور
+        cpu_percent = psutil.cpu_percent(interval=0.5)
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        
+        if ping < 100:
+            status = "🟢 عالی"
+        elif ping < 300:
+            status = "🟡 قابل قبول"
+        else:
+            status = "🔴 ضعیف"
+        
+        return f"""
+📡 <b>بررسی پینگ و وضعیت سرور</b>
+
+⏱ <b>زمان پاسخگویی :</b> {ping} ms
+📊 <b>وضعیت :</b> {status}
+
+🖥 <b>اطلاعات سرور :</b>
+• 💻 سیستم‌عامل : {platform.system()} {platform.release()}
+• 🐍 نسخه پایتون : {platform.python_version()}
+• 🔥 پردازنده : {cpu_percent}% استفاده
+• 💾 رم : {memory.used // (1024**3)}/{memory.total // (1024**3)} GB ({memory.percent}%)
+• 💿 هارد : {disk.used // (1024**3)}/{disk.total // (1024**3)} GB ({disk.percent}%)
+"""
+    except Exception as e:
+        return f"❌ خطا در دریافت اطلاعات: {e}"
+
+def get_credit_text():
+    try:
+        # تاریخ نصب ربات (تغییر بده به تاریخ واقعی)
+        install_date = datetime(2026, 7, 20)  # تاریخ نصب ربات
+        now = datetime.now()
+        days_passed = (now - install_date).days
+        days_left = 30 - days_passed  # 30 روز اعتبار
+        
+        if days_left < 0:
+            days_left = 0
+            status = "🔴 منقضی شده"
+        elif days_left < 7:
+            status = "🟡 رو به اتمام"
+        else:
+            status = "🟢 فعال"
+        
+        return f"""
+⏳ <b>اعتبار هاست</b>
+
+📅 <b>تاریخ نصب :</b> {install_date.strftime('%Y/%m/%d')}
+📅 <b>تاریخ امروز :</b> {now.strftime('%Y/%m/%d')}
+📆 <b>روزهای گذشته :</b> {days_passed} روز
+⏳ <b>روزهای باقی‌مانده :</b> {days_left} روز
+📊 <b>وضعیت :</b> {status}
+
+⚠️ توجه : پس از اتمام اعتبار، ربات غیرفعال خواهد شد.
+"""
+    except Exception as e:
+        return f"❌ خطا در دریافت اطلاعات: {e}"
 
 def get_owner_start_text():
     return f"""
@@ -330,7 +396,8 @@ def get_owner_keyboard():
     keyboard = [
         [{"text": "📊 آمار کامل", "callback_data": "stats"}],
         [{"text": "📡 بررسی پینگ", "callback_data": "ping"}],
-        [{"text": "⏳ اعتبار هاست", "callback_data": "credit"}]
+        [{"text": "⏳ اعتبار هاست", "callback_data": "credit"}],
+        [{"text": "📨 ارسال پیام همگانی", "callback_data": "broadcast"}]
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
@@ -736,20 +803,17 @@ def handle_callback(update):
             return
         
         if data == "ping":
-            start = time.time()
-            requests.get(f"{BASE_URL}/getMe", timeout=30)
-            ping = round((time.time() - start) * 1000, 2)
-            status = "🟢 عالی" if ping < 100 else "🟡 قابل قبول" if ping < 300 else "🔴 ضعیف"
-            edit_message(chat_id, message_id, f"📡 <b>پینگ: {ping}ms</b>\n📊 وضعیت : <b>{status}</b>", get_owner_keyboard())
+            edit_message(chat_id, message_id, get_ping_text(), get_owner_keyboard())
             answer_callback(callback_id)
             return
         
         if data == "credit":
-            edit_message(chat_id, message_id, """
-⏳ <b>اعتبار هاست</b>
-📅 زمان باقی مانده : <b>۱۴ روز</b>
-🟢 وضعیت : <b>فعال</b>
-""", get_owner_keyboard())
+            edit_message(chat_id, message_id, get_credit_text(), get_owner_keyboard())
+            answer_callback(callback_id)
+            return
+        
+        if data == "broadcast":
+            edit_message(chat_id, message_id, "📨 <b>ارسال پیام همگانی</b>\n\nلطفاً پیام مورد نظر را ارسال کنید.\n\n⚠️ پیام برای <b>همه کاربران</b> ارسال خواهد شد.", get_owner_keyboard())
             answer_callback(callback_id)
             return
     
