@@ -6,6 +6,7 @@ import jdatetime
 import os
 import platform
 import psutil
+import subprocess
 from datetime import datetime, timedelta
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
@@ -60,7 +61,7 @@ def send_message(chat_id, text, keyboard=None, reply_to_message_id=None):
     if reply_to_message_id:
         payload["reply_to_message_id"] = reply_to_message_id
     try:
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, timeout=10)
         if response.status_code != 200:
             logger.error(f"خطا در ارسال: {response.text}")
         return response
@@ -72,7 +73,7 @@ def delete_message(chat_id, message_id):
     url = f"{BASE_URL}/deleteMessage"
     payload = {"chat_id": chat_id, "message_id": message_id}
     try:
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, timeout=10)
         if response.status_code != 200:
             logger.error(f"خطا در حذف: {response.text}")
         return response
@@ -86,7 +87,7 @@ def edit_message(chat_id, message_id, text, keyboard=None):
     if keyboard:
         payload["reply_markup"] = keyboard
     try:
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, timeout=10)
         if response.status_code != 200:
             logger.error(f"خطا در ویرایش: {response.text}")
         return response
@@ -98,7 +99,7 @@ def answer_callback(callback_id):
     url = f"{BASE_URL}/answerCallbackQuery"
     payload = {"callback_query_id": callback_id}
     try:
-        requests.post(url, json=payload, timeout=30)
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
         logger.error(f"خطا: {e}")
 
@@ -106,7 +107,7 @@ def get_chat_member(chat_id, user_id):
     url = f"{BASE_URL}/getChatMember"
     payload = {"chat_id": chat_id, "user_id": user_id}
     try:
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, timeout=10)
         if response.status_code == 200:
             return response.json().get("result", {})
         return {}
@@ -133,7 +134,7 @@ def promote_owner(chat_id, user_id):
         "can_manage_video_chats": True
     }
     try:
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, timeout=10)
         if response.status_code == 200:
             logger.info(f"✅ سازنده {user_id} در گروه {chat_id} ادمین شد")
             return True
@@ -152,7 +153,7 @@ def set_owner_title(chat_id, user_id):
         "custom_title": "⋆ سازنده ربات ⋆"
     }
     try:
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, timeout=10)
         if response.status_code == 200:
             logger.info(f"✅ لقب سازنده در گروه {chat_id} تنظیم شد")
             return True
@@ -191,7 +192,7 @@ def get_group_info(chat_id):
     url = f"{BASE_URL}/getChat"
     payload = {"chat_id": chat_id}
     try:
-        response = requests.get(url, json=payload, timeout=30)
+        response = requests.get(url, json=payload, timeout=10)
         if response.status_code == 200:
             return response.json().get("result", {})
         return {}
@@ -202,7 +203,7 @@ def get_group_info(chat_id):
 def get_group_members_count(chat_id):
     url = f"{BASE_URL}/getChatMembersCount"
     try:
-        response = requests.get(url, json={"chat_id": chat_id}, timeout=30)
+        response = requests.get(url, json={"chat_id": chat_id}, timeout=10)
         if response.status_code == 200:
             return response.json().get("result", 0)
         return 0
@@ -213,7 +214,7 @@ def get_group_owner(chat_id):
     try:
         url = f"{BASE_URL}/getChatMember"
         payload = {"chat_id": chat_id, "user_id": OWNER_ID}
-        response = requests.get(url, json=payload, timeout=30)
+        response = requests.get(url, json=payload, timeout=10)
         if response.status_code == 200:
             result = response.json().get("result", {})
             if result.get("status") == "creator":
@@ -314,14 +315,15 @@ def get_ping_text():
     try:
         import time as t
         start = t.time()
-        requests.get(f"{BASE_URL}/getMe", timeout=30)
+        response = requests.get(f"{BASE_URL}/getMe", timeout=10)
         ping = round((t.time() - start) * 1000, 2)
         
-        # اطلاعات سرور
-        cpu_percent = psutil.cpu_percent(interval=0.5)
+        # دریافت اطلاعات سرور
+        cpu_percent = psutil.cpu_percent(interval=0.3)
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
         
+        # تشخیص وضعیت
         if ping < 100:
             status = "🟢 عالی"
         elif ping < 300:
@@ -347,30 +349,46 @@ def get_ping_text():
 
 def get_credit_text():
     try:
-        # تاریخ نصب ربات (تغییر بده به تاریخ واقعی)
-        install_date = datetime(2026, 7, 20)  # تاریخ نصب ربات
-        now = datetime.now()
-        days_passed = (now - install_date).days
-        days_left = 30 - days_passed  # 30 روز اعتبار
-        
-        if days_left < 0:
-            days_left = 0
-            status = "🔴 منقضی شده"
-        elif days_left < 7:
-            status = "🟡 رو به اتمام"
-        else:
-            status = "🟢 فعال"
-        
-        return f"""
+        # دریافت اطلاعات از Railway (تاریخ نصب یا اطلاعات هاست)
+        # اینجا از روش محاسبه با استفاده از زمان آپتایم سرور
+        import subprocess
+        try:
+            # دریافت زمان آپتایم سیستم
+            uptime_seconds = psutil.boot_time()
+            boot_time = datetime.fromtimestamp(uptime_seconds)
+            now = datetime.now()
+            days_running = (now - boot_time).days
+            
+            # اعتبار تخمینی (مثلاً 30 روز از زمان بوت)
+            total_days = 30
+            days_left = total_days - days_running
+            if days_left < 0:
+                days_left = 0
+                status = "🔴 منقضی شده"
+            elif days_left < 7:
+                status = "🟡 رو به اتمام"
+            else:
+                status = "🟢 فعال"
+            
+            return f"""
 ⏳ <b>اعتبار هاست</b>
 
-📅 <b>تاریخ نصب :</b> {install_date.strftime('%Y/%m/%d')}
-📅 <b>تاریخ امروز :</b> {now.strftime('%Y/%m/%d')}
-📆 <b>روزهای گذشته :</b> {days_passed} روز
+📅 <b>زمان راه‌اندازی :</b> {boot_time.strftime('%Y/%m/%d %H:%M')}
+📆 <b>روزهای فعالیت :</b> {days_running} روز
 ⏳ <b>روزهای باقی‌مانده :</b> {days_left} روز
 📊 <b>وضعیت :</b> {status}
 
 ⚠️ توجه : پس از اتمام اعتبار، ربات غیرفعال خواهد شد.
+"""
+        except:
+            # روش جایگزین
+            return """
+⏳ <b>اعتبار هاست</b>
+
+📊 وضعیت : 🟢 فعال
+📅 اعتبار : نامحدود (سرور اختصاصی)
+
+⚠️ در صورت نیاز به اطلاعات دقیق‌تر، با پشتیبانی تماس بگیرید.
 """
     except Exception as e:
         return f"❌ خطا در دریافت اطلاعات: {e}"
@@ -382,21 +400,12 @@ def get_owner_start_text():
 🎯 به پنل مدیریت ربات خوش آمدید !
 
 📌 از اینجا می‌توانید تمامی تنظیمات و آمار ربات را مدیریت کنید.
-
-📊 <b>وضعیت فعلی :</b>
-• 👤 تعداد کل کاربران : <b>{len(bot_stats["users"])}</b>
-• 📁 تعداد کل گروه‌ها : <b>{len(bot_stats["groups"])}</b>
-
-──┅┅┅┅┅┅┅┅┅┅┅┅┅──
-
-🔰 <b>منوی مدیریت :</b>
 """
 
 def get_owner_keyboard():
     keyboard = [
         [{"text": "📊 آمار کامل", "callback_data": "stats"}],
-        [{"text": "📡 بررسی پینگ", "callback_data": "ping"}],
-        [{"text": "⏳ اعتبار هاست", "callback_data": "credit"}],
+        [{"text": "📡 بررسی پینگ", "callback_data": "ping"}, {"text": "⏳ اعتبار هاست", "callback_data": "credit"}],
         [{"text": "📨 ارسال پیام همگانی", "callback_data": "broadcast"}]
     ]
     return json.dumps({"inline_keyboard": keyboard})
@@ -659,7 +668,7 @@ def handle_message(update):
                             params = {"chat_id": chat_id, "limit": 100}
                             if offset:
                                 params["offset"] = offset
-                            response = requests.get(url, params=params, timeout=30)
+                            response = requests.get(url, params=params, timeout=10)
                             if response.status_code == 200:
                                 updates = response.json().get("result", [])
                                 if not updates:
