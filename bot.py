@@ -3,6 +3,7 @@ import time
 import logging
 import json
 import jdatetime
+import os
 from datetime import datetime, timedelta
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
@@ -14,12 +15,26 @@ service_lock_status = {}
 welcome_status = {}
 panel_users = {}
 
-bot_stats = {
-    "users": [],
-    "users_id": [],
-    "groups": [],
-    "groups_id": []
-}
+STATS_FILE = "stats.json"
+
+def load_stats():
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {"users": [], "users_id": [], "groups": [], "groups_id": []}
+    return {"users": [], "users_id": [], "groups": [], "groups_id": []}
+
+def save_stats(stats):
+    try:
+        with open(STATS_FILE, "w", encoding="utf-8") as f:
+            json.dump(stats, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"خطا در ذخیره آمار: {e}")
+
+# بارگذاری آمار از فایل
+bot_stats = load_stats()
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -218,28 +233,28 @@ def send_report_to_owner(chat_id, user_id, user_name):
     report_text = f"""
 📊 <b>گزارش اضافه شدن ربات به گروه</b>
 
-⫸ <b>کاربر اضافه‌کننده :</b> <a href='tg://user?id={user_id}'>{user_name}</a>
-⫸ <b>نام گروه :</b> {group_name}
-⫸ <b>لینک گروه :</b> {group_link}
-⫸ <b>تعداد اعضا :</b> {member_count}
-⫸ <b>مالک گروه :</b> {owner}
+👤 <b>کاربر اضافه‌کننده :</b> <a href='tg://user?id={user_id}'>{user_name}</a>
+📛 <b>نام گروه :</b> {group_name}
+🔗 <b>لینک گروه :</b> {group_link}
+👥 <b>تعداد اعضا :</b> {member_count}
+👑 <b>مالک گروه :</b> {owner}
 """
     send_message(OWNER_ID, report_text)
 
 def get_all_users_text():
     text = "👤 <b>لیست کاربران ربات</b>\n\n"
     if bot_stats["users"]:
-        text += f"تعداد کل: {len(bot_stats['users'])}\n\n"
+        text += f"📊 تعداد کل: {len(bot_stats['users'])}\n\n"
         for i, (name, uid) in enumerate(zip(bot_stats["users"], bot_stats["users_id"]), 1):
             text += f"{i}. <a href='tg://user?id={uid}'>{name}</a>\n"
     else:
-        text += "هنوز کاربری ثبت نشده"
+        text += "📭 هنوز کاربری ثبت نشده"
     return text
 
 def get_all_groups_text():
     text = "📁 <b>لیست گروه‌های ربات</b>\n\n"
     if bot_stats["groups"]:
-        text += f"تعداد کل: {len(bot_stats['groups'])}\n\n"
+        text += f"📊 تعداد کل: {len(bot_stats['groups'])}\n\n"
         for i, (name, gid) in enumerate(zip(bot_stats["groups"], bot_stats["groups_id"]), 1):
             group_info = get_group_info(gid)
             group_username = group_info.get("username", "")
@@ -251,7 +266,7 @@ def get_all_groups_text():
             else:
                 text += f"{i}. {name} (🔒 خصوصی - 👥 {member_count} - 👑 {owner})\n"
     else:
-        text += "هنوز گروهی ثبت نشده"
+        text += "📭 هنوز گروهی ثبت نشده"
     return text
 
 def get_stats_text():
@@ -261,9 +276,9 @@ def get_stats_text():
     users_text = ""
     if bot_stats["users"]:
         for name, uid in list(zip(bot_stats["users"], bot_stats["users_id"]))[-10:]:
-            users_text += f"◄ <a href='tg://user?id={uid}'>{name}</a>\n"
+            users_text += f"🟢 <a href='tg://user?id={uid}'>{name}</a>\n"
     else:
-        users_text = "◄ هنوز کاربری ثبت نشده"
+        users_text = "📭 هنوز کاربری ثبت نشده"
     
     groups_text = ""
     if bot_stats["groups"]:
@@ -273,24 +288,24 @@ def get_stats_text():
             member_count = get_group_members_count(gid)
             owner = get_group_owner(gid)
             if group_username:
-                groups_text += f"◄ <a href='https://t.me/{group_username}'>{name}</a> (👥 {member_count} - 👑 {owner})\n"
+                groups_text += f"🔗 <a href='https://t.me/{group_username}'>{name}</a> (👥 {member_count} - 👑 {owner})\n"
             else:
-                groups_text += f"◄ {name} (🔒 خصوصی - 👥 {member_count} - 👑 {owner})\n"
+                groups_text += f"🔒 {name} (👥 {member_count} - 👑 {owner})\n"
     else:
-        groups_text = "◄ هنوز گروهی ثبت نشده"
+        groups_text = "📭 هنوز گروهی ثبت نشده"
     
     return f"""
 📊 <b>آمار ربات ReaperVoid</b>
 
-⫸ <b>آمار کلی :</b>
+📈 <b>آمار کلی :</b>
 
-◄ تعداد کل کاربران : <b>{total_users}</b>
-◄ تعداد کل گروه‌ها : <b>{total_groups}</b>
+👤 تعداد کل کاربران : <b>{total_users}</b>
+📁 تعداد کل گروه‌ها : <b>{total_groups}</b>
 
-⫸ <b>۱۰ کاربر اخیر :</b>
+🕒 <b>۱۰ کاربر اخیر :</b>
 {users_text}
 
-⫸ <b>۱۰ گروه اخیر :</b>
+🕒 <b>۱۰ گروه اخیر :</b>
 {groups_text}
 """
 
@@ -298,13 +313,13 @@ def get_owner_start_text():
     return f"""
 🌟 <b>سلام برنامه نویس عزیز</b> 🌹
 
-⫸ به پنل مدیریت ربات خوش آمدید !
+🎯 به پنل مدیریت ربات خوش آمدید !
 
-◄ از اینجا می‌توانید تمامی تنظیمات و آمار ربات را مدیریت کنید.
+📌 از اینجا می‌توانید تمامی تنظیمات و آمار ربات را مدیریت کنید.
 
-◂ <b>📊 وضعیت فعلی :</b>
-• تعداد کل کاربران : <b>{len(bot_stats["users"])}</b>
-• تعداد کل گروه‌ها : <b>{len(bot_stats["groups"])}</b>
+📊 <b>وضعیت فعلی :</b>
+• 👤 تعداد کل کاربران : <b>{len(bot_stats["users"])}</b>
+• 📁 تعداد کل گروه‌ها : <b>{len(bot_stats["groups"])}</b>
 
 ──┅┅┅┅┅┅┅┅┅┅┅┅┅──
 
@@ -372,7 +387,7 @@ def get_start_text(user_id, first_name):
 
 ⚠️ تذکر حقوقی :
 
-◄ <b>تمامی ایده‌ها و کدهای این ربات متعلق به تیم ZX بوده و هر گونه کپی‌برداری یا تقلید، پیگرد قانونی دارد. حقوق مادی و معنوی محفوظ است.</b>
+❗ <b>تمامی ایده‌ها و کدهای این ربات متعلق به تیم ZX بوده و هر گونه کپی‌برداری یا تقلید، پیگرد قانونی دارد. حقوق مادی و معنوی محفوظ است.</b>
 
 【 <b>Licenced By 🆉︎🆇︎</b> 】
 """
@@ -380,10 +395,10 @@ def get_start_text(user_id, first_name):
 def get_welcome_text(first_name, group_name, user_id):
     date_str, time_str = get_iran_time()
     return f"""
-⫸ سلام <a href="tg://user?id={user_id}">{first_name}</a> عزیز 🌹
-◄ به گروه <b>{group_name}</b> خوش اومدی 💐
-◂ تاریخ : <b>{date_str}</b> 📆
-◂ ساعت : <b>{time_str}</b> ⏰
+👋 سلام <a href="tg://user?id={user_id}">{first_name}</a> عزیز 🌹
+🎉 به گروه <b>{group_name}</b> خوش اومدی 💐
+📆 تاریخ : <b>{date_str}</b> 
+⏰ ساعت : <b>{time_str}</b>
 """
 
 def get_unknown_text():
@@ -409,12 +424,12 @@ def get_compare_text():
 🦾 <b>درباره ربات ReaperVoid</b>
 
 💎 این ربات کاملاً <b>رایگان</b> است!
-◄ <b>بدون هیچگونه هزینه</b>
-◄ <b>سرعت فوق‌العاده</b>
-◄ <b>قابلیت‌های پیشرفته</b>
-◄ <b>پشتیبانی کامل</b>
-◄ <b>آپدیت مادام‌العمر</b>
-◄ <b>امنیت کامل</b>
+💰 <b>بدون هیچگونه هزینه</b>
+🚀 <b>سرعت فوق‌العاده</b>
+⚙️ <b>قابلیت‌های پیشرفته</b>
+🛡 <b>پشتیبانی کامل</b>
+🔄 <b>آپدیت مادام‌العمر</b>
+🔒 <b>امنیت کامل</b>
 🔰 <b>با ReaperVoid ، گروه خود را به سطح بعدی ببرید!</b>
 """
 
@@ -440,14 +455,14 @@ def get_panel_keyboard():
 
 def get_panel_text():
     return """
-⫸ <b>لطفا بخش مورد نظر خود را انتخاب کنید :</b>
+📋 <b>لطفا بخش مورد نظر خود را انتخاب کنید :</b>
 """
 
 def get_locks_text():
     return """
-⫸ <b>پنل تنظیمات گروه :</b>
+🔒 <b>پنل تنظیمات گروه :</b>
 
-پنل اصلی ◄ قفلها ◂ بخش اول
+پنل اصلی 🔹 قفلها 🔹 بخش اول
 """
 
 def get_locks_keyboard(chat_id):
@@ -470,9 +485,9 @@ def get_advanced_text(chat_id):
     welcome_status_text = "🟢 فعال" if welcome_status.get(chat_id, True) else "🔴 غیرفعال"
     
     return f"""
-⫸ <b>تنظیمات پیشرفته :</b>
+⚙️ <b>تنظیمات پیشرفته :</b>
 
-◄ <b>وضعیت خوش آمدگویی :</b> {welcome_status_text}
+🔹 <b>وضعیت خوش آمدگویی :</b> {welcome_status_text}
 """
 
 def get_advanced_keyboard(chat_id):
@@ -519,10 +534,12 @@ def handle_message(update):
                     if user_name not in bot_stats["users"]:
                         bot_stats["users"].append(user_name)
                         bot_stats["users_id"].append(user_id)
+                        save_stats(bot_stats)
                     group_name = message.get("chat", {}).get("title", "بدون نام")
                     if group_name not in bot_stats["groups"]:
                         bot_stats["groups"].append(group_name)
                         bot_stats["groups_id"].append(chat_id)
+                        save_stats(bot_stats)
                     return
                 
                 if member.get("id") not in [OWNER_ID, 777000, int(TOKEN.split(':')[0])]:
@@ -530,6 +547,7 @@ def handle_message(update):
                     if member_name not in bot_stats["users"]:
                         bot_stats["users"].append(member_name)
                         bot_stats["users_id"].append(member.get("id"))
+                        save_stats(bot_stats)
         
         if welcome_status.get(chat_id, True):
             if "new_chat_members" in message:
@@ -556,14 +574,14 @@ def handle_message(update):
                 if panel_users[chat_id] == user_id:
                     send_message(chat_id, get_panel_text(), get_panel_keyboard(), reply_to_message_id=message_id)
                 else:
-                    send_message(chat_id, "⫸ ✗ پنل برای شما نیست !", reply_to_message_id=message_id)
+                    send_message(chat_id, "⛔️ پنل برای شما نیست !", reply_to_message_id=message_id)
             else:
-                send_message(chat_id, "⫸ ✗ شما دسترسی به پنل ندارید !", reply_to_message_id=message_id)
+                send_message(chat_id, "⛔️ شما دسترسی به پنل ندارید !", reply_to_message_id=message_id)
             return
         
         if text == "پاکسازی گروه":
             if is_admin(chat_id, user_id) or user_id == OWNER_ID:
-                msg = send_message(chat_id, "<b>⫸ پاکسازی گروه شروع شد لطفا صبر نمایید !</b>", reply_to_message_id=message_id)
+                msg = send_message(chat_id, "🧹 پاکسازی گروه شروع شد لطفا صبر نمایید !", reply_to_message_id=message_id)
                 if msg and msg.status_code == 200:
                     msg_id = msg.json().get("result", {}).get("message_id")
                     deleted_count = 0
@@ -592,29 +610,29 @@ def handle_message(update):
                             else:
                                 break
                         if deleted_count > 0:
-                            edit_message(chat_id, msg_id, f"<b>◄ پاکسازی گروه با موفقیت انجام شد !</b>\n🗑 تعداد پیام‌های حذف شده: {deleted_count}")
+                            edit_message(chat_id, msg_id, f"✅ پاکسازی گروه با موفقیت انجام شد !\n🗑 تعداد پیام‌های حذف شده: {deleted_count}")
                         else:
-                            edit_message(chat_id, msg_id, "<b>◄ هیچ پیامی برای پاکسازی وجود نداشت !</b>")
+                            edit_message(chat_id, msg_id, "📭 هیچ پیامی برای پاکسازی وجود نداشت !")
                     except Exception as e:
-                        edit_message(chat_id, msg_id, f"<b>❌ خطا: {e}</b>")
+                        edit_message(chat_id, msg_id, f"❌ خطا: {e}")
             return
         
         if is_admin(chat_id, user_id):
             if text == "قفل خدمات تلگرام":
                 service_lock_status[chat_id] = True
-                send_message(chat_id, "<b>◂ قفل خدمات تلگرام فعال شد !</b>", reply_to_message_id=message_id)
+                send_message(chat_id, "🔒 قفل خدمات تلگرام فعال شد !", reply_to_message_id=message_id)
                 return
             if text == "باز کردن خدمات تلگرام":
                 service_lock_status[chat_id] = False
-                send_message(chat_id, "<b>◂ قفل خدمات تلگرام غیر فعال شد !</b>", reply_to_message_id=message_id)
+                send_message(chat_id, "🔓 قفل خدمات تلگرام غیر فعال شد !", reply_to_message_id=message_id)
                 return
             if text == "خوش آمدگویی فعال":
                 welcome_status[chat_id] = True
-                send_message(chat_id, "<b>◄ خوش آمدگویی فعال شد !</b>", reply_to_message_id=message_id)
+                send_message(chat_id, "✅ خوش آمدگویی فعال شد !", reply_to_message_id=message_id)
                 return
             if text == "خوش آمدگویی غیرفعال":
                 welcome_status[chat_id] = False
-                send_message(chat_id, "<b>◄ خوش آمدگویی غیرفعال شد !</b>", reply_to_message_id=message_id)
+                send_message(chat_id, "❌ خوش آمدگویی غیرفعال شد !", reply_to_message_id=message_id)
                 return
         
         if text == "/start":
@@ -625,6 +643,7 @@ def handle_message(update):
             if first_name not in bot_stats["users"]:
                 bot_stats["users"].append(first_name)
                 bot_stats["users_id"].append(user_id)
+                save_stats(bot_stats)
             
             if user_id == OWNER_ID:
                 send_message(chat_id, get_owner_start_text(), get_owner_keyboard(), reply_to_message_id=message_id)
@@ -721,15 +740,15 @@ def handle_callback(update):
             requests.get(f"{BASE_URL}/getMe", timeout=30)
             ping = round((time.time() - start) * 1000, 2)
             status = "🟢 عالی" if ping < 100 else "🟡 قابل قبول" if ping < 300 else "🔴 ضعیف"
-            edit_message(chat_id, message_id, f"📡 <b>پینگ: {ping}ms</b>\n⫸ وضعیت : <b>{status}</b>", get_owner_keyboard())
+            edit_message(chat_id, message_id, f"📡 <b>پینگ: {ping}ms</b>\n📊 وضعیت : <b>{status}</b>", get_owner_keyboard())
             answer_callback(callback_id)
             return
         
         if data == "credit":
             edit_message(chat_id, message_id, """
 ⏳ <b>اعتبار هاست</b>
-⫸ زمان باقی مانده : <b>۱۴ روز</b>
-⫸ وضعیت : <b>🟢 فعال</b>
+📅 زمان باقی مانده : <b>۱۴ روز</b>
+🟢 وضعیت : <b>فعال</b>
 """, get_owner_keyboard())
             answer_callback(callback_id)
             return
