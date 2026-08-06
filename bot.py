@@ -101,9 +101,12 @@ def edit_message(chat_id, message_id, text, keyboard=None):
         logger.error(f"خطا: {e}")
         return None
 
-def answer_callback(callback_id):
+def answer_callback(callback_id, text=None, show_alert=False):
     url = f"{BASE_URL}/answerCallbackQuery"
     payload = {"callback_query_id": callback_id}
+    if text:
+        payload["text"] = text
+        payload["show_alert"] = show_alert
     try:
         requests.post(url, json=payload, timeout=10)
     except Exception as e:
@@ -391,7 +394,7 @@ def close_panel(chat_id, message_id):
         del panel_users[chat_id]
     if chat_id in panel_timers:
         del panel_timers[chat_id]
-    edit_message(chat_id, message_id, "◂ پنل با موفقیت بسته شد !", None)
+    edit_message(chat_id, message_id, "◂ بدلیل عدم فعالیت پنل بسته شد !", None)
     logger.info(f"پنل گروه {chat_id} به دلیل عدم فعالیت بسته شد")
 
 def get_owner_start_text():
@@ -583,10 +586,10 @@ def get_locks_keyboard(chat_id):
     service_status = service_lock_status.get(chat_id, False)
     
     if service_status:
-        service_text = "🔓 باز کردن خدمات تلگرام"
+        service_text = "باز کردن خدمات تلگرام"
         service_data = "unlock_service"
     else:
-        service_text = "🔒 قفل خدمات تلگرام"
+        service_text = "قفل خدمات تلگرام"
         service_data = "lock_service"
     
     keyboard = [
@@ -608,10 +611,10 @@ def get_advanced_keyboard(chat_id):
     welcome_status_text = welcome_status.get(chat_id, True)
     
     if welcome_status_text:
-        welcome_text = "🔴 غیرفعال کردن خوش آمدگویی"
+        welcome_text = "غیرفعال کردن خوش آمدگویی"
         welcome_data = "disable_welcome"
     else:
-        welcome_text = "🟢 فعال کردن خوش آمدگویی"
+        welcome_text = "فعال کردن خوش آمدگویی"
         welcome_data = "enable_welcome"
     
     keyboard = [
@@ -640,25 +643,30 @@ def handle_message(update):
         if chat_id in broadcast_data and broadcast_data[chat_id]:
             target = broadcast_target.get(chat_id, "all")
             msg_text = broadcast_data[chat_id]
+            success_count = 0
             
             if target == "users":
                 for uid in bot_stats["users_id"]:
-                    send_message(uid, msg_text)
+                    if send_message(uid, msg_text):
+                        success_count += 1
                     time.sleep(0.1)
-                send_message(chat_id, f"✅ پیام به {len(bot_stats['users_id'])} کاربر ارسال شد!", reply_to_message_id=message_id)
+                send_message(chat_id, f"✅ پیام شما با موفقیت به {success_count} کاربر ارسال شد !", reply_to_message_id=message_id)
             elif target == "groups":
                 for gid in bot_stats["groups_id"]:
-                    send_message(gid, msg_text)
+                    if send_message(gid, msg_text):
+                        success_count += 1
                     time.sleep(0.1)
-                send_message(chat_id, f"✅ پیام به {len(bot_stats['groups_id'])} گروه ارسال شد!", reply_to_message_id=message_id)
+                send_message(chat_id, f"✅ پیام شما با موفقیت به {success_count} گروه ارسال شد !", reply_to_message_id=message_id)
             else:  # all
                 for uid in bot_stats["users_id"]:
-                    send_message(uid, msg_text)
+                    if send_message(uid, msg_text):
+                        success_count += 1
                     time.sleep(0.1)
                 for gid in bot_stats["groups_id"]:
-                    send_message(gid, msg_text)
+                    if send_message(gid, msg_text):
+                        success_count += 1
                     time.sleep(0.1)
-                send_message(chat_id, f"✅ پیام به {len(bot_stats['users_id'])} کاربر و {len(bot_stats['groups_id'])} گروه ارسال شد!", reply_to_message_id=message_id)
+                send_message(chat_id, f"✅ پیام شما با موفقیت به {success_count} مخاطب ارسال شد !", reply_to_message_id=message_id)
             
             broadcast_data[chat_id] = None
             broadcast_target[chat_id] = None
@@ -805,7 +813,7 @@ def handle_message(update):
             else:
                 send_message(chat_id, get_start_text(user_id, first_name), get_main_keyboard(), reply_to_message_id=message_id)
             return
-        if text:
+        if text and user_id != OWNER_ID:
             send_message(chat_id, get_unknown_text(), reply_to_message_id=message_id)
             return
 
@@ -919,26 +927,22 @@ def handle_callback(update):
     
     if data == "lock_service":
         service_lock_status[chat_id] = True
-        send_message(chat_id, "◂ قفل خدمات تلگرام فعال شد !", reply_to_message_id=message_id)
-        answer_callback(callback_id)
+        answer_callback(callback_id, "◂ فعال شد !", True)
         return
     
     if data == "unlock_service":
         service_lock_status[chat_id] = False
-        send_message(chat_id, "◂ قفل خدمات تلگرام غیر فعال شد !", reply_to_message_id=message_id)
-        answer_callback(callback_id)
+        answer_callback(callback_id, "◂ غیرفعال شد !", True)
         return
     
     if data == "enable_welcome":
         welcome_status[chat_id] = True
-        send_message(chat_id, "◂ خوش آمدگویی فعال شد !", reply_to_message_id=message_id)
-        answer_callback(callback_id)
+        answer_callback(callback_id, "◂ فعال شد !", True)
         return
     
     if data == "disable_welcome":
         welcome_status[chat_id] = False
-        send_message(chat_id, "◂ خوش آمدگویی غیرفعال شد !", reply_to_message_id=message_id)
-        answer_callback(callback_id)
+        answer_callback(callback_id, "◂ غیرفعال شد !", True)
         return
     
     if user_id == OWNER_ID:
