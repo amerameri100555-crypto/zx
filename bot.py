@@ -8,6 +8,7 @@ import platform
 import psutil
 import subprocess
 from datetime import datetime, timedelta
+from threading import Timer
 
 TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
@@ -17,6 +18,7 @@ OWNER_ID = 7803165903
 service_lock_status = {}
 welcome_status = {}
 panel_users = {}
+panel_timers = {}
 
 STATS_FILE = "stats.json"
 
@@ -237,13 +239,13 @@ def send_report_to_owner(chat_id, user_id, user_name):
     owner = get_group_owner(chat_id)
     
     report_text = f"""
-📊 <b>گزارش اضافه شدن ربات به گروه</b>
+📊 گزارش اضافه شدن ربات به گروه
 
-👤 <b>کاربر اضافه‌کننده :</b> <a href='tg://user?id={user_id}'>{user_name}</a>
-📛 <b>نام گروه :</b> {group_name}
-🔗 <b>لینک گروه :</b> {group_link}
-👥 <b>تعداد اعضا :</b> {member_count}
-👑 <b>مالک گروه :</b> {owner}
+◂ کاربر اضافه‌کننده : <a href='tg://user?id={user_id}'>{user_name}</a>
+◂ نام گروه : {group_name}
+◂ لینک گروه : {group_link}
+◂ تعداد اعضا : {member_count}
+◂ مالک گروه : {owner}
 """
     send_message(OWNER_ID, report_text)
 
@@ -259,13 +261,13 @@ def get_all_users_text(page=1):
     end_idx = start_idx + users_per_page
     users_slice = list(zip(bot_stats["users"], bot_stats["users_id"]))[start_idx:end_idx]
     
-    text = f"👤 <b>لیست کاربران ربات</b>\n\n"
+    text = f"👤 لیست کاربران ربات\n\n"
     if users_slice:
-        text += f"📊 صفحه {page}/{total_pages} | تعداد کل: {total_users}\n\n"
+        text += f"صفحه {page}/{total_pages} | تعداد کل: {total_users}\n\n"
         for i, (name, uid) in enumerate(users_slice, start=start_idx + 1):
             text += f"{i}. <a href='tg://user?id={uid}'>{name}</a>\n"
     else:
-        text += "📭 هنوز کاربری ثبت نشده"
+        text += "هنوز کاربری ثبت نشده"
     
     return text, page, total_pages
 
@@ -281,9 +283,9 @@ def get_all_groups_text(page=1):
     end_idx = start_idx + groups_per_page
     groups_slice = list(zip(bot_stats["groups"], bot_stats["groups_id"]))[start_idx:end_idx]
     
-    text = f"📁 <b>لیست گروه‌های ربات</b>\n\n"
+    text = f"📁 لیست گروه‌های ربات\n\n"
     if groups_slice:
-        text += f"📊 صفحه {page}/{total_pages} | تعداد کل: {total_groups}\n\n"
+        text += f"صفحه {page}/{total_pages} | تعداد کل: {total_groups}\n\n"
         for i, (name, gid) in enumerate(groups_slice, start=start_idx + 1):
             group_info = get_group_info(gid)
             group_username = group_info.get("username", "")
@@ -295,7 +297,7 @@ def get_all_groups_text(page=1):
             else:
                 text += f"{i}. {name} (🔒 خصوصی - 👥 {member_count} - 👑 {owner})\n"
     else:
-        text += "📭 هنوز گروهی ثبت نشده"
+        text += "هنوز گروهی ثبت نشده"
     
     return text, page, total_pages
 
@@ -304,12 +306,12 @@ def get_stats_text():
     total_groups = len(bot_stats["groups"])
     
     return f"""
-📊 <b>آمار کامل ربات ReaperVoid</b>
+📊 آمار کامل ربات ReaperVoid
 
-📈 <b>آمار کلی :</b>
+📈 آمار کلی :
 
-👤 تعداد کل کاربران : <b>{total_users}</b>
-📁 تعداد کل گروه‌ها : <b>{total_groups}</b>
+👤 تعداد کل کاربران : {total_users}
+📁 تعداد کل گروه‌ها : {total_groups}
 """
 
 def get_ping_text():
@@ -331,17 +333,17 @@ def get_ping_text():
             status = "🔴 ضعیف"
         
         return f"""
-📡 <b>بررسی پینگ و وضعیت سرور</b>
+📡 بررسی پینگ و وضعیت سرور
 
-⏱ <b>زمان پاسخگویی :</b> {ping} ms
-📊 <b>وضعیت :</b> {status}
+⏱ زمان پاسخگویی : {ping} ms
+📊 وضعیت : {status}
 
-🖥 <b>اطلاعات سرور :</b>
-• 💻 سیستم‌عامل : {platform.system()} {platform.release()}
-• 🐍 نسخه پایتون : {platform.python_version()}
-• 🔥 پردازنده : {cpu_percent}% استفاده
-• 💾 رم : {memory.used // (1024**3)}/{memory.total // (1024**3)} GB ({memory.percent}%)
-• 💿 هارد : {disk.used // (1024**3)}/{disk.total // (1024**3)} GB ({disk.percent}%)
+🖥 اطلاعات سرور :
+◂ سیستم‌عامل : {platform.system()} {platform.release()}
+◂ نسخه پایتون : {platform.python_version()}
+◂ پردازنده : {cpu_percent}% استفاده
+◂ رم : {memory.used // (1024**3)}/{memory.total // (1024**3)} GB ({memory.percent}%)
+◂ هارد : {disk.used // (1024**3)}/{disk.total // (1024**3)} GB ({disk.percent}%)
 """
     except Exception as e:
         return f"❌ خطا در دریافت اطلاعات: {e}"
@@ -364,18 +366,18 @@ def get_credit_text():
             status = "🟢 فعال"
         
         return f"""
-⏳ <b>اعتبار هاست</b>
+⏳ اعتبار هاست
 
-📅 <b>زمان راه‌اندازی :</b> {boot_time.strftime('%Y/%m/%d %H:%M')}
-📆 <b>روزهای فعالیت :</b> {days_running} روز
-⏳ <b>روزهای باقی‌مانده :</b> {days_left} روز
-📊 <b>وضعیت :</b> {status}
+📅 زمان راه‌اندازی : {boot_time.strftime('%Y/%m/%d %H:%M')}
+📆 روزهای فعالیت : {days_running} روز
+⏳ روزهای باقی‌مانده : {days_left} روز
+📊 وضعیت : {status}
 
 ⚠️ توجه : پس از اتمام اعتبار، ربات غیرفعال خواهد شد.
 """
     except:
         return """
-⏳ <b>اعتبار هاست</b>
+⏳ اعتبار هاست
 
 📊 وضعیت : 🟢 فعال
 📅 اعتبار : نامحدود (سرور اختصاصی)
@@ -383,9 +385,18 @@ def get_credit_text():
 ⚠️ در صورت نیاز به اطلاعات دقیق‌تر، با پشتیبانی تماس بگیرید.
 """
 
+def close_panel(chat_id, message_id):
+    """بستن خودکار پنل بعد از 60 ثانیه عدم فعالیت"""
+    if chat_id in panel_users:
+        del panel_users[chat_id]
+    if chat_id in panel_timers:
+        del panel_timers[chat_id]
+    edit_message(chat_id, message_id, "◂ پنل با موفقیت بسته شد !", None)
+    logger.info(f"پنل گروه {chat_id} به دلیل عدم فعالیت بسته شد")
+
 def get_owner_start_text():
     return f"""
-🌟 <b>سلام برنامه نویس عزیز</b> 🌹
+🌟 سلام برنامه نویس عزیز 🌹
 
 🎯 به پنل مدیریت ربات خوش آمدید !
 
@@ -410,32 +421,25 @@ def get_stats_keyboard():
 
 def get_users_keyboard(page, total_pages):
     keyboard = []
-    
-    # دکمه‌های صفحه‌بندی
     nav_buttons = []
     if page > 1:
         nav_buttons.append({"text": "◀️ قبلی", "callback_data": f"users_page_{page-1}"})
     if page < total_pages:
         nav_buttons.append({"text": "▶️ بعدی", "callback_data": f"users_page_{page+1}"})
-    
     if nav_buttons:
         keyboard.append(nav_buttons)
-    
     keyboard.append([{"text": "🔙 بازگشت", "callback_data": "back_stats"}])
     return json.dumps({"inline_keyboard": keyboard})
 
 def get_groups_keyboard(page, total_pages):
     keyboard = []
-    
     nav_buttons = []
     if page > 1:
         nav_buttons.append({"text": "◀️ قبلی", "callback_data": f"groups_page_{page-1}"})
     if page < total_pages:
         nav_buttons.append({"text": "▶️ بعدی", "callback_data": f"groups_page_{page+1}"})
-    
     if nav_buttons:
         keyboard.append(nav_buttons)
-    
     keyboard.append([{"text": "🔙 بازگشت", "callback_data": "back_stats"}])
     return json.dumps({"inline_keyboard": keyboard})
 
@@ -448,95 +452,99 @@ def get_broadcast_keyboard():
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
+def get_broadcast_back_keyboard():
+    keyboard = [[{"text": "🔙 بازگشت", "callback_data": "back_broadcast"}]]
+    return json.dumps({"inline_keyboard": keyboard})
+
 def get_start_text(user_id, first_name):
     return f"""
-🌟 <b>سلام بر تو <a href="tg://user?id={user_id}">{first_name}</a> عزیز</b> 🌹
+🌟 سلام بر تو <a href="tg://user?id={user_id}">{first_name}</a> عزیز 🌹
 
 💬 من رباتی هوشمند و قدرتمند برای مدیریت حرفه‌ای گروه‌های تلگرامی هستم!
 
 🔥 برتری‌های انحصاری من :
 
-⚡ <b>پاکسازی گروه در کسری از ثانیه</b>
-🛡 <b>سیستم ضدترک گروه</b>
-🔒 <b>قفل‌های متنوع و حرفه‌ای</b>
-👋 <b>خوش‌آمدگویی هوشمند</b>
-📊 <b>گزارش‌گیری دقیق و روزانه</b>
-🚫 <b>بدون تبلیغات مزاحم</b>
+⚡ پاکسازی گروه در کسری از ثانیه
+🛡 سیستم ضدترک گروه
+🔒 قفل‌های متنوع و حرفه‌ای
+👋 خوش‌آمدگویی هوشمند
+📊 گزارش‌گیری دقیق و روزانه
+🚫 بدون تبلیغات مزاحم
 
 ✨ ویژگی‌های منحصربفرد :
 
-⏫ <b>۹۹.۹٪ آپتایم</b>
-🖥 <b>هاست قدرتمند و اختصاصی</b>
-🚀 <b>سرعت بی‌نظیر در گروه‌های سنگین</b>
-🛡 <b>پایداری در برابر حملات</b>
-🔐 <b>قفل‌های متنوع و حرفه‌ای</b>
-🤖 <b>احوالپرسی اتوماتیک و هوشمند</b>
-➕ <b>قابلیت اضافه کردن اجباری</b>
-📋 <b>گزارش‌گیری دقیق و روزانه</b>
-⏳ <b>دوره تست برای اطمینان</b>
-🚫 <b>کاملاً بدون تبلیغات مزاحم</b>
+⏫ ۹۹.۹٪ آپتایم
+🖥 هاست قدرتمند و اختصاصی
+🚀 سرعت بی‌نظیر در گروه‌های سنگین
+🛡 پایداری در برابر حملات
+🔐 قفل‌های متنوع و حرفه‌ای
+🤖 احوالپرسی اتوماتیک و هوشمند
+➕ قابلیت اضافه کردن اجباری
+📋 گزارش‌گیری دقیق و روزانه
+⏳ دوره تست برای اطمینان
+🚫 کاملاً بدون تبلیغات مزاحم
 
 ⚡ ما شبیه هیچکس نیستیم!
 
-🛡 <b>امنیت گروه، اولویت اول ماست</b>
-💎 <b>کیفیت، حرف اول را می‌زند</b>
-⚡ <b>سرعت، مزیت رقابتی ماست</b>
+🛡 امنیت گروه، اولویت اول ماست
+💎 کیفیت، حرف اول را می‌زند
+⚡ سرعت، مزیت رقابتی ماست
 
 ❓ چرا به ما اعتماد کنیم؟
 
-⚡ <b>پردازش فوق‌سریع</b>
-📞 <b>پاسخگویی آنی</b>
-🔄 <b>آپدیت‌های مستمر</b>
-👨‍💻 <b>پشتیبانی حرفه‌ای</b>
+⚡ پردازش فوق‌سریع
+📞 پاسخگویی آنی
+🔄 آپدیت‌های مستمر
+👨‍💻 پشتیبانی حرفه‌ای
 
-💻 <b>ساخته شده توسط تیم ZX</b>
+💻 ساخته شده توسط تیم ZX
 
 ⚠️ تذکر حقوقی :
 
-❗ <b>تمامی ایده‌ها و کدهای این ربات متعلق به تیم ZX بوده و هر گونه کپی‌برداری یا تقلید، پیگرد قانونی دارد. حقوق مادی و معنوی محفوظ است.</b>
+❗ تمامی ایده‌ها و کدهای این ربات متعلق به تیم ZX بوده و هر گونه کپی‌برداری یا تقلید، پیگرد قانونی دارد. حقوق مادی و معنوی محفوظ است.
 
-【 <b>Licenced By 🆉︎🆇︎</b> 】
+【 Licenced By 🆉︎🆇︎ 】
 """
 
 def get_welcome_text(first_name, group_name, user_id):
     date_str, time_str = get_iran_time()
     return f"""
 👋 سلام <a href="tg://user?id={user_id}">{first_name}</a> عزیز 🌹
-🎉 به گروه <b>{group_name}</b> خوش اومدی 💐
-📆 تاریخ : <b>{date_str}</b> 
-⏰ ساعت : <b>{time_str}</b>
+🎉 به گروه {group_name} خوش اومدی 💐
+📆 تاریخ : {date_str} 
+⏰ ساعت : {time_str}
 """
 
 def get_unknown_text():
     return """
-❌ <b>متاسفانه منظور شما رو نفهمیدم!</b>
-🔰 برای مشاهده منوی اصلی، دستور <b>/start</b> را ارسال کنید.
+❌ متاسفانه منظور شما رو نفهمیدم!
+🔰 برای مشاهده منوی اصلی، دستور /start را ارسال کنید.
 📌 ما همیشه در کنار شما هستیم!
 """
 
 def get_info_text():
     return """
-📓 <b>اطلاعات بیشتر درباره ربات ReaperVoid :</b>
+📓 اطلاعات بیشتر درباره ربات ReaperVoid :
 
-✅ این ربات بر روی <b>سرورهای اختصاصی و باکیفیت آمستردام هلند</b> مستقر شده است.
-✅ هدف اصلی ما، <b>حفاظت کامل از گروه شما</b> در تمامی ابعاد است.
+✅ این ربات بر روی سرورهای اختصاصی و باکیفیت آمستردام هلند مستقر شده است.
+✅ هدف اصلی ما، حفاظت کامل از گروه شما در تمامی ابعاد است.
 ✅ هیچگونه دسترسی یا سوءاستفاده‌ای از گروه شما انجام نخواهد شد.
-✅ ربات ReaperVoid همواره در حال <b>به‌روزرسانی و توسعه</b> است.
-✅ این ربات توسط <b>تیم حرفه‌ای ZX</b> توسعه یافته است.
+✅ ربات ReaperVoid همواره در حال به‌روزرسانی و توسعه است.
+✅ این ربات توسط تیم حرفه‌ای ZX توسعه یافته است.
 """
 
 def get_compare_text():
     return """
-🦾 <b>درباره ربات ReaperVoid</b>
+🦾 درباره ربات ReaperVoid
 
-💎 این ربات کاملاً <b>رایگان</b> است!
-💰 <b>بدون هیچگونه هزینه</b>
-🚀 <b>سرعت فوق‌العاده</b>
-⚙️ <b>قابلیت‌های پیشرفته</b>
-🛡 <b>پشتیبانی کامل</b>
-🔄 <b>آپدیت مادام‌العمر</b>
-🔒 <b>امنیت کامل</b>
-🔰 <b>با ReaperVoid ، گروه خود را به سطح بعدی ببرید!</b>
+💎 این ربات کاملاً رایگان است!
+💰 بدون هیچگونه هزینه
+🚀 سرعت فوق‌العاده
+⚙️ قابلیت‌های پیشرفته
+🛡 پشتیبانی کامل
+🔄 آپدیت مادام‌العمر
+🔒 امنیت کامل
+🔰 با ReaperVoid ، گروه خود را به سطح بعدی ببرید!
 """
 
 def get_main_keyboard():
@@ -555,18 +563,19 @@ def get_back_keyboard():
 def get_panel_keyboard():
     keyboard = [
         [{"text": "قفل‌ها", "callback_data": "locks"}],
-        [{"text": "تنظیمات پیشرفته", "callback_data": "advanced"}]
+        [{"text": "تنظیمات پیشرفته", "callback_data": "advanced"}],
+        [{"text": "◂ بستن", "callback_data": "close_panel"}]
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
 def get_panel_text():
     return """
-📋 <b>لطفا بخش مورد نظر خود را انتخاب کنید :</b>
+📋 لطفا بخش مورد نظر خود را انتخاب کنید :
 """
 
 def get_locks_text():
     return """
-🔒 <b>پنل تنظیمات گروه :</b>
+🔒 پنل تنظیمات گروه :
 پنل اصلی 🔹 قفلها 🔹 بخش اول
 """
 
@@ -582,7 +591,7 @@ def get_locks_keyboard(chat_id):
     
     keyboard = [
         [{"text": service_text, "callback_data": service_data}],
-        [{"text": "🔙 بازگشت به پنل", "callback_data": "panel_back"}]
+        [{"text": "◂ بستن", "callback_data": "close_panel"}]
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
@@ -590,9 +599,9 @@ def get_advanced_text(chat_id):
     welcome_status_text = "🟢 فعال" if welcome_status.get(chat_id, True) else "🔴 غیرفعال"
     
     return f"""
-⚙️ <b>تنظیمات پیشرفته ربات :</b>
+〽️ تنظیمات پیشرفته ربات :
 
-🔹 <b>وضعیت خوش آمدگویی :</b> {welcome_status_text}
+🔹 وضعیت خوش آمدگویی : {welcome_status_text}
 """
 
 def get_advanced_keyboard(chat_id):
@@ -607,7 +616,7 @@ def get_advanced_keyboard(chat_id):
     
     keyboard = [
         [{"text": welcome_text, "callback_data": welcome_data}],
-        [{"text": "🔙 بازگشت به پنل", "callback_data": "panel_back"}]
+        [{"text": "◂ بستن", "callback_data": "close_panel"}]
     ]
     return json.dumps({"inline_keyboard": keyboard})
 
@@ -707,7 +716,17 @@ def handle_message(update):
             if is_admin(chat_id, user_id):
                 if chat_id not in panel_users:
                     panel_users[chat_id] = user_id
+                    # تایمر 60 ثانیه برای بستن خودکار پنل
+                    if chat_id in panel_timers:
+                        panel_timers[chat_id].cancel()
+                    panel_timers[chat_id] = Timer(60.0, close_panel, args=[chat_id, message_id])
+                    panel_timers[chat_id].start()
                 if panel_users[chat_id] == user_id:
+                    # ریست تایمر
+                    if chat_id in panel_timers:
+                        panel_timers[chat_id].cancel()
+                    panel_timers[chat_id] = Timer(60.0, close_panel, args=[chat_id, message_id])
+                    panel_timers[chat_id].start()
                     send_message(chat_id, get_panel_text(), get_panel_keyboard(), reply_to_message_id=message_id)
                 else:
                     send_message(chat_id, "⛔️ پنل برای شما نیست !", reply_to_message_id=message_id)
@@ -756,19 +775,19 @@ def handle_message(update):
         if is_admin(chat_id, user_id):
             if text == "قفل خدمات تلگرام":
                 service_lock_status[chat_id] = True
-                send_message(chat_id, "🔒 قفل خدمات تلگرام فعال شد !", reply_to_message_id=message_id)
+                send_message(chat_id, "◂ قفل خدمات تلگرام فعال شد !", reply_to_message_id=message_id)
                 return
             if text == "باز کردن خدمات تلگرام":
                 service_lock_status[chat_id] = False
-                send_message(chat_id, "🔓 قفل خدمات تلگرام غیر فعال شد !", reply_to_message_id=message_id)
+                send_message(chat_id, "◂ قفل خدمات تلگرام غیر فعال شد !", reply_to_message_id=message_id)
                 return
             if text == "خوش آمدگویی فعال":
                 welcome_status[chat_id] = True
-                send_message(chat_id, "✅ خوش آمدگویی فعال شد !", reply_to_message_id=message_id)
+                send_message(chat_id, "◂ خوش آمدگویی فعال شد !", reply_to_message_id=message_id)
                 return
             if text == "خوش آمدگویی غیرفعال":
                 welcome_status[chat_id] = False
-                send_message(chat_id, "❌ خوش آمدگویی غیرفعال شد !", reply_to_message_id=message_id)
+                send_message(chat_id, "◂ خوش آمدگویی غیرفعال شد !", reply_to_message_id=message_id)
                 return
         
         if text == "/start":
@@ -813,6 +832,29 @@ def handle_callback(update):
         answer_callback(callback_id)
         return
     
+    # ریست تایمر پنل
+    if chat_id in panel_timers:
+        panel_timers[chat_id].cancel()
+        panel_timers[chat_id] = Timer(60.0, close_panel, args=[chat_id, message_id])
+        panel_timers[chat_id].start()
+    
+    # ===== بستن پنل =====
+    if data == "close_panel":
+        if chat_id in panel_users:
+            del panel_users[chat_id]
+        if chat_id in panel_timers:
+            panel_timers[chat_id].cancel()
+            del panel_timers[chat_id]
+        edit_message(chat_id, message_id, "◂ پنل با موفقیت بسته شد !", None)
+        answer_callback(callback_id)
+        return
+    
+    # ===== بازگشت به منوی اصلی از ارسال همگانی =====
+    if data == "back_broadcast":
+        edit_message(chat_id, message_id, "📨 ارسال پیام همگانی\n\nلطفاً مخاطب خود را انتخاب کنید:", get_broadcast_keyboard())
+        answer_callback(callback_id)
+        return
+    
     # ===== پردازش صفحه‌بندی کاربران =====
     if data.startswith("users_page_"):
         page = int(data.split("_")[2])
@@ -837,21 +879,26 @@ def handle_callback(update):
         return
     
     # ===== ارسال همگانی =====
+    if data == "broadcast":
+        edit_message(chat_id, message_id, "📨 ارسال پیام همگانی\n\nلطفاً مخاطب خود را انتخاب کنید:", get_broadcast_keyboard())
+        answer_callback(callback_id)
+        return
+    
     if data == "broadcast_users":
         broadcast_target[chat_id] = "users"
-        edit_message(chat_id, message_id, "👤 <b>ارسال پیام به کاربران</b>\n\nلطفاً پیام مورد نظر را ارسال کنید.", get_owner_keyboard())
+        edit_message(chat_id, message_id, "👤 لطفا پیام خود را به کاربران بفرستید:", get_broadcast_back_keyboard())
         answer_callback(callback_id)
         return
     
     if data == "broadcast_groups":
         broadcast_target[chat_id] = "groups"
-        edit_message(chat_id, message_id, "📁 <b>ارسال پیام به گروه‌ها</b>\n\nلطفاً پیام مورد نظر را ارسال کنید.", get_owner_keyboard())
+        edit_message(chat_id, message_id, "📁 لطفا پیام خود را به گروه‌ها بفرستید:", get_broadcast_back_keyboard())
         answer_callback(callback_id)
         return
     
     if data == "broadcast_all":
         broadcast_target[chat_id] = "all"
-        edit_message(chat_id, message_id, "📨 <b>ارسال پیام به همه</b>\n\nلطفاً پیام مورد نظر را ارسال کنید.", get_owner_keyboard())
+        edit_message(chat_id, message_id, "📨 لطفا پیام خود را به همه بفرستید:", get_broadcast_back_keyboard())
         answer_callback(callback_id)
         return
     
@@ -872,25 +919,25 @@ def handle_callback(update):
     
     if data == "lock_service":
         service_lock_status[chat_id] = True
-        edit_message(chat_id, message_id, get_locks_text(), get_locks_keyboard(chat_id))
+        send_message(chat_id, "◂ قفل خدمات تلگرام فعال شد !", reply_to_message_id=message_id)
         answer_callback(callback_id)
         return
     
     if data == "unlock_service":
         service_lock_status[chat_id] = False
-        edit_message(chat_id, message_id, get_locks_text(), get_locks_keyboard(chat_id))
+        send_message(chat_id, "◂ قفل خدمات تلگرام غیر فعال شد !", reply_to_message_id=message_id)
         answer_callback(callback_id)
         return
     
     if data == "enable_welcome":
         welcome_status[chat_id] = True
-        edit_message(chat_id, message_id, get_advanced_text(chat_id), get_advanced_keyboard(chat_id))
+        send_message(chat_id, "◂ خوش آمدگویی فعال شد !", reply_to_message_id=message_id)
         answer_callback(callback_id)
         return
     
     if data == "disable_welcome":
         welcome_status[chat_id] = False
-        edit_message(chat_id, message_id, get_advanced_text(chat_id), get_advanced_keyboard(chat_id))
+        send_message(chat_id, "◂ خوش آمدگویی غیرفعال شد !", reply_to_message_id=message_id)
         answer_callback(callback_id)
         return
     
@@ -916,11 +963,6 @@ def handle_callback(update):
         
         if data == "back_owner":
             edit_message(chat_id, message_id, get_owner_start_text(), get_owner_keyboard())
-            answer_callback(callback_id)
-            return
-        
-        if data == "broadcast":
-            edit_message(chat_id, message_id, "📨 <b>ارسال پیام همگانی</b>\n\nلطفاً مخاطب خود را انتخاب کنید:", get_broadcast_keyboard())
             answer_callback(callback_id)
             return
         
