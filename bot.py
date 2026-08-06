@@ -788,7 +788,8 @@ def handle_message(update):
             if text == "باز کردن خدمات تلگرام":
                 service_lock_status[chat_id] = False
                 send_message(chat_id, "◂ قفل خدمات تلگرام غیر فعال شد !", reply_to_message_id=message_id)
-                return            if text == "خوش آمدگویی فعال":
+                return
+            if text == "خوش آمدگویی فعال":
                 welcome_status[chat_id] = True
                 send_message(chat_id, "◂ خوش آمدگویی فعال شد !", reply_to_message_id=message_id)
                 return
