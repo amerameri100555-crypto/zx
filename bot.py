@@ -6,7 +6,7 @@ import jdatetime
 import os
 import platform
 import psutil
-import subprocess
+import sys
 from datetime import datetime, timedelta
 from threading import Timer
 
@@ -14,6 +14,7 @@ TOKEN = "8532288807:AAGJXJnmHJ68Cyh7eMK9muIcZydKAZLayVQ"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 OWNER_ID = 7803165903
+START_TIME = time.time()
 
 service_lock_status = {}
 welcome_status = {}
@@ -571,7 +572,7 @@ def get_panel_keyboard():
 
 def get_panel_text():
     return """
-◄ <b>لطفا بخش مورد نظر خود را انتخاب کنید :</b>
+◂ <b>لطفا بخش مورد نظر خود را انتخاب کنید :</b>
 """
 
 def get_locks_text():
@@ -725,13 +726,11 @@ def handle_message(update):
             if is_admin(chat_id, user_id):
                 if chat_id not in panel_users:
                     panel_users[chat_id] = user_id
-                    # تایمر 60 ثانیه برای بستن خودکار پنل
                     if chat_id in panel_timers:
                         panel_timers[chat_id].cancel()
                     panel_timers[chat_id] = Timer(60.0, close_panel, args=[chat_id, message_id])
                     panel_timers[chat_id].start()
                 if panel_users[chat_id] == user_id:
-                    # ریست تایمر
                     if chat_id in panel_timers:
                         panel_timers[chat_id].cancel()
                     panel_timers[chat_id] = Timer(60.0, close_panel, args=[chat_id, message_id])
@@ -789,8 +788,7 @@ def handle_message(update):
             if text == "باز کردن خدمات تلگرام":
                 service_lock_status[chat_id] = False
                 send_message(chat_id, "◂ قفل خدمات تلگرام غیر فعال شد !", reply_to_message_id=message_id)
-                return
-            if text == "خوش آمدگویی فعال":
+                return            if text == "خوش آمدگویی فعال":
                 welcome_status[chat_id] = True
                 send_message(chat_id, "◂ خوش آمدگویی فعال شد !", reply_to_message_id=message_id)
                 return
@@ -841,7 +839,6 @@ def handle_callback(update):
         answer_callback(callback_id)
         return
     
-    # ریست تایمر پنل
     if chat_id in panel_timers:
         panel_timers[chat_id].cancel()
         panel_timers[chat_id] = Timer(60.0, close_panel, args=[chat_id, message_id])
