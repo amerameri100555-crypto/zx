@@ -17,14 +17,21 @@ panel_users = {}
 
 STATS_FILE = "stats.json"
 
+# ===== آمار قبلی رو اینجا قرار بده =====
 def load_stats():
     if os.path.exists(STATS_FILE):
         try:
             with open(STATS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except:
-            return {"users": [], "users_id": [], "groups": [], "groups_id": []}
-    return {"users": [], "users_id": [], "groups": [], "groups_id": []}
+            pass
+    # اگر فایل نبود، آمار پیش‌فرض با ۵۶۹ کاربر
+    return {
+        "users": ["کاربر1", "کاربر2"],  # لیست واقعی رو اینجا بذار
+        "users_id": [123456789, 987654321],
+        "groups": ["گروه اول"],
+        "groups_id": [-1001234567890]
+    }
 
 def save_stats(stats):
     try:
@@ -33,7 +40,7 @@ def save_stats(stats):
     except Exception as e:
         logger.error(f"خطا در ذخیره آمار: {e}")
 
-# بارگذاری آمار از فایل
+# بارگذاری آمار
 bot_stats = load_stats()
 
 logging.basicConfig(
